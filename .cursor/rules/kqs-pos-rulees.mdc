@@ -1,0 +1,558 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# KQS POS Development Rules & Guidelines
+
+> **Critical Reference Document**: Feed this entire document to any AI assistant working on the KQS POS project to ensure consistency and quality throughout development.
+
+---
+
+## 📋 Table of Contents
+
+1. [Project Overview & Context](#project-overview--context)
+2. [Design System Rules](#design-system-rules)
+3. [Code Quality Standards](#code-quality-standards)
+4. [Component Development Guidelines](#component-development-guidelines)
+5. [File Organization Rules](#file-organization-rules)
+6. [TypeScript Standards](#typescript-standards)
+7. [UI/UX Design Principles](#uiux-design-principles)
+8. [Database & API Guidelines](#database--api-guidelines)
+9. [Performance Requirements](#performance-requirements)
+10. [Security Standards](#security-standards)
+11. [Testing Requirements](#testing-requirements)
+12. [Development Workflow](#development-workflow)
+13. [Deployment Standards](#deployment-standards)
+
+---
+
+## 🎯 Project Overview & Context
+
+### **Business Context**
+- **Industry**: Retail Point of Sale (POS) system
+- **Target Users**: Small to medium retail businesses
+- **Key Features**: Offline-first, AI-powered, lay-bye management, credit accounts
+- **Platforms**: Cross-platform PWA (Windows, Mac, Android)
+
+### **Technical Stack (MANDATORY)**
+- **Frontend**: Next.js 14+ with App Router, React 18+, TypeScript
+- **Styling**: Tailwind CSS with custom design system
+- **Backend**: Supabase (PostgreSQL, Auth, Storage, Realtime)
+- **Icons**: Lucide React ONLY
+- **Forms**: React Hook Form + Zod validation
+- **State Management**: React Context + Zustand (when needed)
+- **PWA**: Service workers for offline support
+
+### **Project Structure (ENFORCE STRICTLY)**
+```
+kqs-pos/
+├── src/
+│   ├── app/                    # Next.js App Router
+│   │   ├── (admin)/           # Admin routes (backoffice)
+│   │   ├── (pos)/            # POS routes (cashier interface)
+│   │   ├── (auth)/           # Authentication routes
+│   │   └── api/              # API routes
+│   ├── components/           # Shared components
+│   │   ├── ui/              # Atomic design components
+│   │   └── layout/          # Layout components
+│   ├── features/            # Feature-based modules
+│   ├── lib/                 # Utility libraries
+│   ├── types/               # TypeScript definitions
+│   └── hooks/               # Custom React hooks
+```
+
+---
+
+## 🎨 Design System Rules
+
+### **Typography Rules**
+- **Font Family**: Inter ONLY (`font-family: 'Inter', system-ui, sans-serif`)
+- **Font Weights**: 400 (normal), 500 (medium), 600 (semibold), 700 (bold)
+- **Never use**: Custom fonts, Google Fonts other than Inter, system fonts
+
+### **Color System (STRICT ADHERENCE)**
+```css
+/* ALWAYS use these exact HSL values */
+:root {
+  --background: 0 0% 100%;
+  --foreground: 240 10% 3.9%;
+  --primary: 240 5.9% 10%;
+  --primary-foreground: 0 0% 98%;
+  --secondary: 240 4.8% 95.9%;
+  --secondary-foreground: 240 5.9% 10%;
+  --muted: 240 4.8% 95.9%;
+  --muted-foreground: 240 3.8% 46.1%;
+  --accent: 240 4.8% 95.9%;
+  --accent-foreground: 240 5.9% 10%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 240 5.9% 90%;
+  --input: 240 5.9% 90%;
+  --ring: 240 5.9% 10%;
+  --card: 0 0% 100%;
+  --card-foreground: 240 10% 3.9%;
+  --radius: 0.5rem;
+}
+```
+
+### **Component Styling Rules**
+- **ALWAYS use**: HSL color tokens (`hsl(var(--primary))`)
+- **NEVER use**: Hardcoded colors, hex values, rgb values
+- **Border Radius**: Use `--radius` CSS variable consistently
+- **Shadows**: Use Tailwind shadow utilities (`shadow-sm`, `shadow-md`)
+
+### **Spacing System**
+- **Use Tailwind spacing**: `p-4`, `m-6`, `space-x-3`, `gap-4`
+- **Consistent spacing**: 4, 6, 8, 12, 16, 24 units for major elements
+- **Never use**: Custom spacing values, arbitrary values unless absolutely necessary
+
+---
+
+## 💻 Code Quality Standards
+
+### **File Naming Conventions (MANDATORY)**
+- **Components**: PascalCase (`Button.tsx`, `ProductCard.tsx`)
+- **Pages**: lowercase (`page.tsx`, `layout.tsx`)
+- **Utilities**: camelCase (`formatCurrency.ts`, `validateInput.ts`)
+- **Constants**: UPPER_SNAKE_CASE (`API_ENDPOINTS.ts`)
+
+### **Import Order (ENFORCE)**
+```typescript
+// 1. React and Next.js imports
+import React from 'react'
+import { useRouter } from 'next/navigation'
+
+// 2. Third-party libraries
+import { supabase } from '@/lib/supabase'
+import { cn } from '@/lib/utils'
+
+// 3. Internal components and utilities
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+
+// 4. Icons (ALWAYS from lucide-react)
+import { Plus, Search, Edit } from 'lucide-react'
+
+// 5. Types and interfaces
+import type { Product, Customer } from '@/types'
+```
+
+### **Function Component Rules**
+- **ALWAYS use**: Arrow functions for components
+- **Export**: Default export for pages, named exports for components
+- **Props**: Define TypeScript interfaces for all props
+- **Destructuring**: Destructure props in function signature
+
+```typescript
+// ✅ CORRECT
+interface ButtonProps {
+  variant?: 'primary' | 'secondary'
+  children: React.ReactNode
+}
+
+const Button = ({ variant = 'primary', children }: ButtonProps) => {
+  return <button>{children}</button>
+}
+
+// ❌ WRONG
+function Button(props) {
+  return <button>{props.children}</button>
+}
+```
+
+---
+
+## 🧩 Component Development Guidelines
+
+### **Atomic Design Principles (MANDATORY)**
+- **Atoms**: Basic UI elements (`Button`, `Input`, `Card`)
+- **Molecules**: Combinations of atoms (`SearchBar`, `ProductCard`)
+- **Organisms**: Complex components (`ProductTable`, `Dashboard`)
+- **Templates**: Page layouts
+- **Pages**: Specific instances
+
+### **Component Structure Template**
+```typescript
+import * as React from "react"
+import { cn } from "@/lib/utils"
+
+// Define props interface
+export interface ComponentProps
+  extends React.HTMLAttributes<HTMLDivElement> {
+  variant?: "default" | "secondary"
+  size?: "sm" | "md" | "lg"
+}
+
+// Component implementation
+const Component = React.forwardRef<HTMLDivElement, ComponentProps>(
+  ({ className, variant = "default", size = "md", ...props }, ref) => {
+    return (
+      <div
+        className={cn(
+          "base-classes",
+          {
+            "variant-classes": variant === "default"
+          },
+          className
+        )}
+        ref={ref}
+        {...props}
+      />
+    )
+  }
+)
+Component.displayName = "Component"
+
+export { Component }
+```
+
+### **Component Requirements**
+- **ALWAYS**: Use `forwardRef` for UI components
+- **ALWAYS**: Include `displayName` for debugging
+- **ALWAYS**: Support `className` prop for customization
+- **ALWAYS**: Use `cn()` utility for class merging
+- **NEVER**: Use inline styles unless absolutely necessary
+
+---
+
+## 📁 File Organization Rules
+
+### **Feature-Based Organization (MANDATORY)**
+```
+features/
+├── auth/
+│   ├── components/
+│   ├── hooks/
+│   ├── types/
+│   └── utils/
+├── products/
+│   ├── components/
+│   ├── hooks/
+│   ├── types/
+│   └── utils/
+└── customers/
+    ├── components/
+    ├── hooks/
+    ├── types/
+    └── utils/
+```
+
+### **Component Organization**
+- **UI Components**: `src/components/ui/` (reusable across features)
+- **Layout Components**: `src/components/layout/` (navigation, sidebars)
+- **Feature Components**: `src/features/[feature]/components/`
+
+### **Naming Patterns**
+- **Pages**: `page.tsx`, `layout.tsx`, `loading.tsx`, `error.tsx`
+- **Components**: Descriptive names (`ProductTable.tsx`, `CustomerForm.tsx`)
+- **Hooks**: Prefix with `use` (`useProducts.ts`, `useAuth.ts`)
+- **Utils**: Descriptive functions (`formatCurrency.ts`, `validateEmail.ts`)
+
+---
+
+## 🔒 TypeScript Standards
+
+### **Type Definition Rules (STRICT)**
+- **NO `any` types**: Always define proper types
+- **Interface over Type**: Use interfaces for object shapes
+- **Strict mode**: Keep TypeScript strict mode enabled
+- **Generic types**: Use for reusable components
+
+### **Type Organization**
+```typescript
+// Base types
+export interface BaseEntity {
+  id: string
+  created_at: string
+  updated_at: string
+}
+
+// Feature-specific types
+export interface Product extends BaseEntity {
+  name: string
+  price: number
+  stock_quantity: number
+  category_id: string
+}
+
+// Component prop types
+export interface ProductCardProps {
+  product: Product
+  onEdit: (product: Product) => void
+  onDelete: (id: string) => void
+}
+```
+
+### **Required Type Exports**
+- **Database types**: Generated from Supabase
+- **Component props**: For all reusable components
+- **API responses**: For all API endpoints
+- **Form schemas**: Using Zod
+
+---
+
+## 🎨 UI/UX Design Principles
+
+### **Design Consistency Rules**
+- **Button heights**: `h-10` (default), `h-9` (sm), `h-11` (lg)
+- **Input heights**: `h-10` consistently
+- **Card padding**: `p-4` (small), `p-6` (default), `p-8` (large)
+- **Icon sizes**: `h-4 w-4` (small), `h-5 w-5` (default), `h-6 w-6` (large)
+
+### **Responsive Design Rules**
+- **Mobile-first**: Start with mobile design
+- **Breakpoints**: Use Tailwind defaults (`sm:`, `md:`, `lg:`, `xl:`)
+- **Grid layouts**: Use CSS Grid for complex layouts
+- **Flexbox**: Use for simple alignments
+
+### **Accessibility Requirements (MANDATORY)**
+- **Focus states**: Visible focus rings on all interactive elements
+- **Color contrast**: Minimum 4.5:1 ratio
+- **Keyboard navigation**: All functionality accessible via keyboard
+- **Screen readers**: Proper ARIA labels and semantic HTML
+
+### **User Experience Guidelines**
+- **Loading states**: Show loading indicators for all async operations
+- **Error states**: Clear error messages with actionable advice
+- **Success states**: Confirmation messages for important actions
+- **Empty states**: Helpful guidance when no data is available
+
+---
+
+## 🗄️ Database & API Guidelines
+
+### **Supabase Integration Rules**
+- **Client initialization**: Use single client instance from `@/lib/supabase`
+- **Type safety**: Generate types from database schema
+- **Row Level Security**: Enable RLS on all tables
+- **Real-time**: Use for live data updates where needed
+
+### **API Design Patterns**
+```typescript
+// API Response format
+interface ApiResponse<T> {
+  data?: T
+  error?: string
+  message?: string
+}
+
+// Error handling
+try {
+  const { data, error } = await supabase
+    .from('products')
+    .select('*')
+  
+  if (error) throw error
+  return { data, error: null }
+} catch (error) {
+  return { data: null, error: error.message }
+}
+```
+
+### **Data Fetching Rules**
+- **Server Components**: Use for initial data loading
+- **Client Components**: Use for interactive data updates
+- **SWR/TanStack Query**: For client-side data fetching
+- **Optimistic updates**: For better UX
+
+---
+
+## ⚡ Performance Requirements
+
+### **Bundle Size Optimization**
+- **Code splitting**: Dynamic imports for large features
+- **Tree shaking**: Import only what's needed
+- **Image optimization**: Use Next.js Image component
+- **Font optimization**: Preload critical fonts
+
+### **Performance Metrics (TARGETS)**
+- **First Contentful Paint**: < 1.5s
+- **Largest Contentful Paint**: < 2.5s
+- **Cumulative Layout Shift**: < 0.1
+- **Time to Interactive**: < 3s
+
+### **Optimization Techniques**
+- **Memoization**: Use `React.memo`, `useMemo`, `useCallback`
+- **Lazy loading**: For non-critical components
+- **Caching**: Use Supabase caching and Next.js cache
+- **CDN**: For static assets
+
+---
+
+## 🔐 Security Standards
+
+### **Authentication & Authorization**
+- **Supabase Auth**: Use for all authentication
+- **Role-based access**: Implement proper role checking
+- **Protected routes**: Secure all admin routes
+- **Session management**: Proper token handling
+
+### **Input Validation (MANDATORY)**
+- **Client-side**: Zod schemas for all forms
+- **Server-side**: Validate all API inputs
+- **Sanitization**: Clean user inputs
+- **XSS prevention**: Escape output data
+
+### **Data Security**
+- **Environment variables**: For all sensitive data
+- **HTTPS**: Force HTTPS in production
+- **CORS**: Proper CORS configuration
+- **SQL injection**: Use parameterized queries
+
+---
+
+## 🧪 Testing Requirements
+
+### **Testing Strategy**
+- **Unit tests**: For utility functions and components
+- **Integration tests**: For feature workflows
+- **E2E tests**: For critical user journeys
+- **Visual regression**: For UI consistency
+
+### **Testing Tools**
+- **Jest**: Unit testing framework
+- **React Testing Library**: Component testing
+- **Playwright**: E2E testing
+- **MSW**: API mocking
+
+### **Coverage Requirements**
+- **Minimum coverage**: 80% for critical features
+- **Business logic**: 100% coverage for calculations
+- **Edge cases**: Test error conditions
+- **Accessibility**: Include a11y tests
+
+---
+
+## 🔄 Development Workflow
+
+### **Git Workflow Rules**
+- **Branch naming**: `feature/description`, `fix/description`
+- **Commit messages**: Conventional commits format
+- **PR requirements**: Code review before merge
+- **Main branch**: Always deployable
+
+### **Code Review Checklist**
+- [ ] TypeScript errors resolved
+- [ ] ESLint warnings addressed
+- [ ] Consistent styling applied
+- [ ] Performance considerations
+- [ ] Security implications reviewed
+- [ ] Accessibility standards met
+
+### **Development Environment**
+- **Node.js**: Latest LTS version
+- **Package manager**: npm (consistent across team)
+- **Environment**: Development, staging, production
+- **Hot reload**: Enabled for development
+
+---
+
+## 🚀 Deployment Standards
+
+### **Build Requirements**
+- **TypeScript**: Zero compilation errors
+- **ESLint**: Zero errors, warnings acceptable
+- **Build success**: All builds must complete
+- **Environment variables**: Properly configured
+
+### **Production Checklist**
+- [ ] Supabase production setup
+- [ ] Environment variables configured
+- [ ] HTTPS certificate installed
+- [ ] Performance monitoring enabled
+- [ ] Error tracking configured
+- [ ] Backup systems in place
+
+### **Deployment Platforms**
+- **Frontend**: Vercel (recommended)
+- **Backend**: Supabase
+- **Domain**: Custom domain with SSL
+- **CDN**: Enabled for static assets
+
+---
+
+## 📚 Documentation Requirements
+
+### **Code Documentation**
+- **JSDoc**: For all public functions
+- **README**: Setup and development instructions
+- **API docs**: Endpoint documentation
+- **Component docs**: Usage examples
+
+### **User Documentation**
+- **User guides**: For each feature
+- **Admin guides**: For system management
+- **API guides**: For integrations
+- **Troubleshooting**: Common issues
+
+---
+
+## ⚠️ Common Pitfalls to Avoid
+
+### **Code Quality Issues**
+- ❌ Using `any` type in TypeScript
+- ❌ Hardcoded colors instead of design tokens
+- ❌ Missing error handling
+- ❌ No loading states
+- ❌ Inconsistent component patterns
+
+### **Performance Issues**
+- ❌ Large bundle sizes
+- ❌ Unnecessary re-renders
+- ❌ Missing memoization
+- ❌ Synchronous operations blocking UI
+
+### **Security Issues**
+- ❌ Client-side secrets
+- ❌ Missing input validation
+- ❌ Unprotected routes
+- ❌ SQL injection vulnerabilities
+
+### **UX Issues**
+- ❌ Missing feedback for user actions
+- ❌ Inconsistent navigation
+- ❌ Poor error messages
+- ❌ Inaccessible components
+
+---
+
+## 🎯 Success Criteria
+
+### **Technical Criteria**
+- ✅ Zero TypeScript errors
+- ✅ Consistent design system usage
+- ✅ 80%+ test coverage
+- ✅ Performance targets met
+- ✅ Security standards followed
+
+### **Business Criteria**
+- ✅ All features in blueprint implemented
+- ✅ Cross-platform compatibility
+- ✅ Offline functionality working
+- ✅ User feedback positive
+- ✅ Performance satisfactory
+
+---
+
+## 📞 Support & Resources
+
+### **Documentation Links**
+- [Project Blueprint](./KQS_POS_Project_Blueprint.md)
+- [Next.js Documentation](https://nextjs.org/docs)
+- [Supabase Documentation](https://supabase.com/docs)
+- [Tailwind CSS Documentation](https://tailwindcss.com/docs)
+
+### **Development Resources**
+- [Lucide Icons](https://lucide.dev/)
+- [React Hook Form](https://react-hook-form.com/)
+- [Zod Validation](https://zod.dev/)
+
+---
+
+**🚨 CRITICAL REMINDER**: This document must be referenced for ALL development decisions. Any deviation must be justified and documented. Consistency is key to project success.
+
+**Last Updated**: july 2025  
+**Version**: 1.0  
+
+**Status**: Active Development Guidelines 

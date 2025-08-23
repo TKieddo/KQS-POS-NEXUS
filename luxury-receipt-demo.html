@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KQS Luxury Boutique Receipt - Design Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            color: #333;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #E5FF29, #FF6B6B);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            color: #666;
+        }
+
+        .demo-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin-bottom: 40px;
+        }
+
+        .receipt-preview {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            border: 2px solid #E5FF29;
+        }
+
+        .receipt {
+            background: white;
+            border: 2px solid #333;
+            border-radius: 8px;
+            padding: 20px;
+            max-width: 300px;
+            margin: 0 auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        .receipt-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .receipt-logo {
+            font-size: 24px;
+            font-weight: bold;
+            letter-spacing: 3px;
+            margin-bottom: 5px;
+        }
+
+        .receipt-tagline {
+            font-size: 10px;
+            color: #666;
+            margin-bottom: 10px;
+        }
+
+        .receipt-divider {
+            border-top: 1px solid #333;
+            margin: 10px 0;
+        }
+
+        .receipt-items {
+            margin: 15px 0;
+        }
+
+        .receipt-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+
+        .receipt-total {
+            text-align: right;
+            font-weight: bold;
+            font-size: 14px;
+            margin-top: 15px;
+        }
+
+        .receipt-footer {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 10px;
+        }
+
+        .features {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+
+        .feature-list {
+            list-style: none;
+        }
+
+        .feature-list li {
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .feature-list li:last-child {
+            border-bottom: none;
+        }
+
+        .feature-icon {
+            width: 20px;
+            height: 20px;
+            background: #E5FF29;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+
+        .design-elements {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 40px;
+        }
+
+        .element-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+            border-left: 4px solid #E5FF29;
+        }
+
+        .element-card h3 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+
+        .element-card p {
+            color: #666;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .cta-section {
+            text-align: center;
+            margin-top: 40px;
+            padding: 40px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+
+        .cta-button {
+            background: linear-gradient(45deg, #E5FF29, #FF6B6B);
+            color: #333;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+            margin: 10px;
+        }
+
+        .cta-button:hover {
+            transform: translateY(-2px);
+        }
+
+        @media (max-width: 768px) {
+            .demo-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>KQS Luxury Boutique Receipt</h1>
+            <p>Premium boutique receipt design concept</p>
+        </div>
+
+        <div class="demo-grid">
+            <div class="receipt-preview">
+                <h2 style="text-align: center; margin-bottom: 20px; color: #333;">Receipt Preview</h2>
+                <div class="receipt">
+                    <div class="receipt-header">
+                        <div class="receipt-logo">KQS</div>
+                        <div class="receipt-tagline">LUXURY BOUTIQUE</div>
+                        <div class="receipt-divider">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</div>
+                        <div>123 Luxury Avenue, Fashion District</div>
+                        <div>+27 11 123 4567 • style@kqs-boutique.com</div>
+                        <div class="receipt-divider">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</div>
+                    </div>
+
+                    <div style="text-align: center; font-weight: bold; margin-bottom: 15px;">PURCHASE RECEIPT</div>
+                    
+                    <div>Receipt #KQS-2024-001234</div>
+                    <div>15/12/2024 • 14:30</div>
+                    <div>Stylist: Sarah Johnson</div>
+                    <div>Client: Emma Thompson</div>
+                    
+                    <div class="receipt-divider">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</div>
+                    <div style="text-align: center; font-weight: bold; font-size: 10px;">ITEMS PURCHASED</div>
+                    
+                    <div class="receipt-items">
+                        <div class="receipt-item">
+                            <span>👗 Designer Dress</span>
+                            <span>R 2,500.00</span>
+                        </div>
+                        <div class="receipt-item">
+                            <span>👠 Luxury Heels</span>
+                            <span>R 1,800.00</span>
+                        </div>
+                        <div class="receipt-item">
+                            <span>👜 Designer Handbag</span>
+                            <span>R 3,200.00</span>
+                        </div>
+                        <div class="receipt-item">
+                            <span>💍 Statement Ring</span>
+                            <span>R 950.00</span>
+                        </div>
+                    </div>
+
+                    <div class="receipt-divider">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</div>
+                    
+                    <div class="receipt-total">
+                        <div>Subtotal: R 8,450.00</div>
+                        <div>Tax (15%): R 1,267.50</div>
+                        <div>Discount: -R 500.00</div>
+                        <div style="font-size: 16px; margin-top: 10px;">TOTAL: R 9,217.50</div>
+                    </div>
+
+                    <div>Payment: Credit Card</div>
+                    <div>Change: R 0.00</div>
+
+                    <div class="receipt-footer">
+                        <div class="receipt-divider">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</div>
+                        <div>RETURN POLICY: 14 days with original receipt</div>
+                        <div>Exchanges available within 30 days</div>
+                        <div>Earn points on every purchase • Join our VIP program</div>
+                        <div>Follow us: @KQSBoutique</div>
+                        <div>www.kqs-boutique.com</div>
+                        <div class="receipt-divider">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</div>
+                        <div style="font-weight: bold; font-size: 12px;">THANK YOU FOR CHOOSING KQS</div>
+                        <div>We look forward to styling you again!</div>
+                        <div style="margin-top: 10px;">[QR Code] [Barcode]</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="features">
+                <h2 style="margin-bottom: 20px; color: #333;">Design Features</h2>
+                <ul class="feature-list">
+                    <li>
+                        <div class="feature-icon">🎨</div>
+                        <span>Luxury typography with elegant spacing</span>
+                    </li>
+                    <li>
+                        <div class="feature-icon">🛍️</div>
+                        <span>Category icons for visual appeal</span>
+                    </li>
+                    <li>
+                        <div class="feature-icon">✨</div>
+                        <span>Stylish dividers and separators</span>
+                    </li>
+                    <li>
+                        <div class="feature-icon">👑</div>
+                        <span>VIP program messaging</span>
+                    </li>
+                    <li>
+                        <div class="feature-icon">📱</div>
+                        <span>Social media integration</span>
+                    </li>
+                    <li>
+                        <div class="feature-icon">🔗</div>
+                        <span>QR code for digital receipts</span>
+                    </li>
+                    <li>
+                        <div class="feature-icon">📋</div>
+                        <span>Professional return policy</span>
+                    </li>
+                    <li>
+                        <div class="feature-icon">💝</div>
+                        <span>Branded thank you message</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="design-elements">
+            <div class="element-card">
+                <h3>🎨 Visual Design</h3>
+                <p>Clean, modern layout with your KQS brand colors. Elegant typography and sophisticated spacing that reflects the premium nature of your boutique.</p>
+            </div>
+            <div class="element-card">
+                <h3>🛍️ Category Icons</h3>
+                <p>Visual category icons (👗👠👜💍) for shoes, clothes, accessories, and jewelry to make the receipt more engaging and easier to scan.</p>
+            </div>
+            <div class="element-card">
+                <h3>✨ Unique Elements</h3>
+                <p>Elegant dividers, luxury messaging, VIP program integration, and social media handles to create a memorable customer experience.</p>
+            </div>
+            <div class="element-card">
+                <h3>🎯 Brand Integration</h3>
+                <p>Prominent KQS branding with your signature red/black color scheme and the distinctive Q element incorporated throughout the design.</p>
+            </div>
+        </div>
+
+        <div class="cta-section">
+            <h2 style="margin-bottom: 20px; color: #333;">Ready to Implement?</h2>
+            <p style="margin-bottom: 30px; color: #666;">This luxury receipt design can be fully integrated into your KQS POS system with customizable elements.</p>
+            <button class="cta-button" onclick="alert('This will be integrated into your KQS POS system!')">
+                🚀 Implement Design
+            </button>
+            <button class="cta-button" onclick="window.print()">
+                🖨️ Print Demo
+            </button>
+        </div>
+    </div>
+</body>
+</html> 

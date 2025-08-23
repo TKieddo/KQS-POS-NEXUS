@@ -1,0 +1,19 @@
+<svg width="800" height="534" viewBox="0 0 800 534" xmlns="http://www.w3.org/2000/svg">
+  <!-- House shape in black -->
+  <path d="M399 10 L250 150 L250 450 L340 450 L340 300 L460 300 L460 450 L550 450 L550 150 Z" fill="#231F20"/>
+  
+  <!-- Red parts of the logo -->
+  <path d="M475 280 L560 400 L640 350 L560 250 Z" fill="#C1272D"/>
+  <path d="M250 150 L150 200 C180 290 250 350 350 380 C450 410 550 390 650 330 L550 150 Z" fill="none" stroke="#C1272D" stroke-width="25"/>
+  
+  <!-- Red circle in the window -->
+  <circle cx="400" cy="350" r="25" fill="#C1272D"/>
+  <path d="M400 325 L400 375 M375 350 L425 350" stroke="white" stroke-width="4"/>
+  
+  <!-- Black outline -->
+  <path d="M150 200 C180 290 250 350 350 380 C450 410 550 390 650 330" fill="none" stroke="#231F20" stroke-width="15"/>
+  
+  <!-- KQS PROPERTY DEVELOPMENT PTY Ltd text -->
+  <text x="400" y="500" font-family="Arial, sans-serif" font-weight="bold" font-size="54" text-anchor="middle" fill="#231F20">KQS PROPERTY DEVELOPMENT</text>
+  <text x="400" y="560" font-family="Arial, sans-serif" font-weight="bold" font-size="54" text-anchor="middle" fill="#231F20">PTY Ltd</text>
+</svg> 
