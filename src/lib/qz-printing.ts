@@ -2,7 +2,7 @@
 // Based on the working demo approach
 // Usage: import { printReceipt, openCashDrawer, printReceiptAndOpenDrawer } from '@/lib/qz-printing'
 
-declare var qz: any
+declare const qz: any
 
 export async function printReceipt(printerName: string, data: string | string[], options?: any) {
   if (!qz) throw new Error('QZ Tray not loaded');

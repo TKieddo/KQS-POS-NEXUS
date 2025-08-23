@@ -166,7 +166,7 @@ const TemplatePreview: React.FC<TemplatePreviewProps> = ({ templateType, classNa
         return (
           <div className="text-center text-xs font-mono">
             <div className="font-bold mb-1">KQS</div>
-            <div className="text-gray-600">Returns & Exchange</div>
+            <div className="text-gray-600">Returns &amp; Exchange</div>
             <div className="text-gray-500 mt-1">━━━━━━━━━━━━━━</div>
             <div className="text-gray-700">Exchange: 1 item</div>
             <div className="text-gray-700">Credit: R850</div>

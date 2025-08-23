@@ -3,10 +3,8 @@ import type { NextConfig } from 'next'
 const nextConfig: NextConfig = {
   // Enable experimental features
   experimental: {
-    // Enable App Router features
-    appDir: true,
     // Enable server components
-    serverComponentsExternalPackages: ['@supabase/supabase-js'],
+    serverExternalPackages: ['@supabase/supabase-js'],
   },
 
   // Image optimization
