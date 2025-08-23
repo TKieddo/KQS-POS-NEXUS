@@ -32,7 +32,6 @@ interface LayByeContract {
   depositAmount: number
   remainingAmount: number
   paymentSchedule: 'weekly' | 'biweekly' | 'monthly'
-  paymentAmount: number
   startDate: string
   endDate: string
   status: 'active' | 'completed' | 'cancelled'
@@ -151,7 +150,7 @@ export default function ConvertSaleToLayByePage() {
       filtered = filtered.filter(sale =>
         sale.customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         sale.saleNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        sale.customer.phone.includes(searchQuery)
+        (sale.customer.phone && sale.customer.phone.includes(searchQuery))
       )
     }
 
@@ -431,7 +430,7 @@ const LayByeContractModal: React.FC<LayByeContractModalProps> = ({
 }) => {
   const [contractData, setContractData] = useState({
     depositAmount: sale.total * 0.2, // 20% default deposit
-    paymentSchedule: 'monthly' as const,
+    paymentSchedule: 'monthly' as 'weekly' | 'biweekly' | 'monthly',
     paymentAmount: (sale.total * 0.8) / 3, // 3 months default
     startDate: new Date().toISOString().split('T')[0],
     endDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
@@ -503,7 +502,7 @@ const LayByeContractModal: React.FC<LayByeContractModalProps> = ({
                 value={contractData.paymentSchedule}
                 onChange={(e) => setContractData(prev => ({ 
                   ...prev, 
-                  paymentSchedule: e.target.value as any 
+                  paymentSchedule: e.target.value as 'weekly' | 'biweekly' | 'monthly'
                 }))}
                 className="w-full h-10 rounded-lg border border-gray-200 focus:border-[#E5FF29] focus:ring-[#E5FF29]/20"
               >
