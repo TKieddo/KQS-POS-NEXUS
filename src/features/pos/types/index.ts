@@ -27,14 +27,29 @@ export interface CartItem {
 
 export interface Customer {
   id: string
-  name: string
-  email?: string
+  customer_number: string
+  first_name: string
+  last_name: string
+  email: string
   phone?: string
-  address?: string
-  credit_limit?: number
-  current_balance?: number
+  address_street?: string
+  address_city?: string
+  address_state?: string
+  address_zip_code?: string
+  address_country?: string
+  status: string
+  customer_type: string
+  account_balance: number // Money they have in their account
+  credit_limit: number // Maximum they can go into debt
+  branch_id?: string
+  last_purchase_date?: string
+  total_purchases?: number
+  total_spent?: number
   created_at: string
   updated_at: string
+  // For backward compatibility
+  name?: string
+  current_balance?: number // Legacy field
 }
 
 export interface PaymentMethod {

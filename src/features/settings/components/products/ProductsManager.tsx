@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Plus, Search, Package, ExternalLink } from 'lucide-react'
+import { Plus, Search, Package, ExternalLink, ArrowLeft } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -101,13 +101,24 @@ export const ProductsManager: React.FC = () => {
           </Badge>
         </div>
         <div className="flex gap-2">
-          <Link href="/admin/products">
+          <Link href="/products">
+            <Button variant="ghost" size="sm" className="text-muted-foreground">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Products
+            </Button>
+          </Link>
+          <Link href="/products">
+            <Button variant="ghost" size="sm">
+              Products
+            </Button>
+          </Link>
+          <Link href="/products">
             <Button variant="outline">
               <ExternalLink className="h-4 w-4 mr-2" />
               Full Product Manager
             </Button>
           </Link>
-          <Link href="/admin/products">
+          <Link href="/products">
             <Button className="bg-[#E5FF29] text-black hover:bg-[#E5FF29]/90">
               <Plus className="h-4 w-4 mr-2" />
               Add Product
@@ -187,7 +198,7 @@ export const ProductsManager: React.FC = () => {
             
             {filteredProducts.length > 10 && (
               <div className="text-center pt-4">
-                <Link href="/admin/products">
+                <Link href="/products">
                   <Button variant="outline">
                     View All {products.length} Products
                   </Button>
@@ -208,7 +219,7 @@ export const ProductsManager: React.FC = () => {
             This section focuses on product configuration. For complete product management including 
             adding/editing products, managing variants, inventory, and more, use the dedicated product manager.
           </p>
-          <Link href="/admin/products">
+          <Link href="/products">
             <Button className="bg-[#E5FF29] text-black hover:bg-[#E5FF29]/90">
               <Package className="h-4 w-4 mr-2" />
               Open Product Manager
@@ -227,7 +238,7 @@ export const ProductsManager: React.FC = () => {
               <p className="text-sm text-gray-400 mb-4">
                 Start by creating categories and variant options, then add your first product
               </p>
-              <Link href="/admin/products">
+              <Link href="/products">
                 <Button className="bg-[#E5FF29] text-black hover:bg-[#E5FF29]/90">
                   <Plus className="h-4 w-4 mr-2" />
                   Create Your First Product

@@ -12,7 +12,8 @@ import {
   Percent,
   CreditCard,
   CheckCircle,
-  Receipt
+  Receipt,
+  X
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,9 +21,9 @@ import { formatCurrency } from '@/lib/utils'
 import { usePOSSettingsHook } from '@/hooks/usePOSSettings'
 import { getPaymentOption } from '@/lib/payment-options-service'
 import { DiscountModal } from './DiscountModal'
-import { CustomerSelectionModal } from './CustomerSelectionModal'
 import { LaybyeModal } from './LaybyeModal'
 import { PaymentMethodModal } from './PaymentMethodModal'
+import { CustomerSelectionModal } from './CustomerSelectionModal'
 import type { CartItem, Customer } from '../types'
 
 interface OrderDetailsProps {
@@ -31,7 +32,7 @@ interface OrderDetailsProps {
   total: number
   onRemoveItem: (itemId: string) => void
   onUpdateQuantity: (itemId: string, quantity: number) => void
-  onPaymentComplete: (paymentMethod: string, paymentAmount: number) => void
+  onPaymentComplete: (paymentMethod: string, paymentAmount: number, splitPayments?: Array<{method: string, amount: number}>) => void
   onCustomerSelect: (customer: Customer) => void
   onCustomerClear: () => void
   onDiscountApplied?: (discountAmount: number, discountType: 'percentage' | 'fixed') => void
@@ -69,20 +70,22 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
   onLaybyePaymentComplete
 }) => {
   const { settings: posSettings } = usePOSSettingsHook()
-  const [amountPaid, setAmountPaid] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
   const [showDiscountModal, setShowDiscountModal] = useState(false)
-  const [showCustomerModal, setShowCustomerModal] = useState(false)
   const [showLaybyeModal, setShowLaybyeModal] = useState(false)
   const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false)
+  const [showCustomerSelect, setShowCustomerSelect] = useState(false)
   const [showPaymentSuccess, setShowPaymentSuccess] = useState(false)
   const [paymentJustCompleted, setPaymentJustCompleted] = useState(false)
+  const [splitPayments, setSplitPayments] = useState<Array<{method: string, amount: number}>>([])
+  const [remainingAmount, setRemainingAmount] = useState(0)
   const [lastPaymentDetails, setLastPaymentDetails] = useState<{
     paymentMethod: string
     totalAmount: number
     amountPaid: number
     change: number
     transactionNumber?: string
+    splitPayments?: Array<{method: string, amount: number}>
   } | null>(null)
   const [discount, setDiscount] = useState(0)
   const [discountType, setDiscountType] = useState<'percentage' | 'fixed'>('percentage')
@@ -91,7 +94,10 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
   // VAT is already included in product prices, so no additional tax calculation
   const taxAmount = 0
   const finalTotal = total - discount
-  const change = parseFloat(amountPaid) - finalTotal
+  
+  // Calculate remaining amount for split payments
+  const totalPaid = splitPayments.reduce((sum, payment) => sum + payment.amount, 0)
+  const remainingToPay = Math.max(0, finalTotal - totalPaid)
 
   // Hide payment success state when items are added to cart
   useEffect(() => {
@@ -113,16 +119,16 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
     load()
   }, [])
 
-  const handlePayment = async (paymentMethod: string = 'cash') => {
+  const handlePayment = async (paymentMethod: string = 'cash', cashAmount?: number) => {
     if (cart.length === 0) return
     
     setIsProcessing(true)
     
     try {
-      // For cash payments, use the entered amount (or full amount if none entered)
+      // For cash payments, use the provided cash amount
       // For non-cash payments, always use the exact total amount
       const paymentAmount = paymentMethod === 'cash' 
-        ? (parseFloat(amountPaid) || finalTotal) 
+        ? (cashAmount || finalTotal) 
         : finalTotal
       const changeAmount = paymentAmount - finalTotal
       
@@ -146,7 +152,11 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
         totalAmount: finalTotal,
         amountPaid: paymentAmount,
         change: changeAmount,
-        transactionNumber
+        transactionNumber,
+        splitPayments: [{
+          method: paymentMethod,
+          amount: paymentAmount
+        }]
       })
       
       // Call the parent payment handler
@@ -157,7 +167,6 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
       setShowPaymentSuccess(true)
       
       // Reset form
-      setAmountPaid('')
       setDiscount(0)
     } catch (error) {
       console.error('Payment failed:', error)
@@ -166,9 +175,80 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
     }
   }
 
-  const handlePaymentMethodSelect = (paymentMethod: string) => {
-    // For all payment methods, process immediately using the already entered amount or full amount
-    handlePayment(paymentMethod)
+  const addSplitPayment = (method: string, amount: number) => {
+    if (amount <= 0) return
+    
+    const newPayment = { method, amount }
+    
+    // If this completes the payment, process the transaction with the updated payments
+    if (totalPaid + amount >= finalTotal) {
+      const updatedSplitPayments = [...splitPayments, newPayment]
+      processSplitPaymentTransaction(updatedSplitPayments)
+    } else {
+      setSplitPayments(prev => [...prev, newPayment])
+    }
+  }
+
+  const removeSplitPayment = (index: number) => {
+    setSplitPayments(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const processSplitPaymentTransaction = async (paymentsToProcess?: Array<{method: string, amount: number}>) => {
+    const payments = paymentsToProcess || splitPayments
+    if (payments.length === 0) return
+    
+    setIsProcessing(true)
+    
+    try {
+      // Use the first payment method as the primary method for the transaction
+      const primaryMethod = payments[0].method
+      
+      console.log('Processing split payment transaction:', {
+        items: cart,
+        customer,
+        total: finalTotal,
+        splitPayments: payments,
+        primaryMethod
+      })
+      
+      // Generate a proper transaction number
+      const now = new Date()
+      const transactionNumber = `TXN${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}-${now.getHours().toString().padStart(2,'0')}${now.getMinutes().toString().padStart(2,'0')}${now.getSeconds().toString().padStart(2,'0')}`
+      
+      // Calculate total amount paid and change
+      const totalAmountPaid = payments.reduce((sum, payment) => sum + payment.amount, 0)
+      const changeAmount = totalAmountPaid - finalTotal
+      
+      // Store payment details for success modal
+      setLastPaymentDetails({
+        paymentMethod: primaryMethod,
+        totalAmount: finalTotal,
+        amountPaid: totalAmountPaid,
+        change: changeAmount,
+        transactionNumber,
+        splitPayments: payments
+      })
+      
+      // Call the parent payment handler with the primary method and split payments
+      console.log('🎯 OrderDetails sending split payments to parent:', payments)
+      onPaymentComplete(primaryMethod, finalTotal, payments)
+      
+      // Show payment success state
+      setPaymentJustCompleted(true)
+      setShowPaymentSuccess(true)
+      
+      // Reset split payments
+      setSplitPayments([])
+      setDiscount(0)
+    } catch (error) {
+      console.error('Split payment failed:', error)
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  const handlePaymentMethodSelect = (paymentMethod: string, amount: number) => {
+    addSplitPayment(paymentMethod, amount)
   }
 
   const handleDiscountApplied = (discountAmount: number, type: 'percentage' | 'fixed') => {
@@ -200,7 +280,7 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
     // The cart will be cleared by the parent component after payment
   }
 
-  const canProcessPayment = cart.length > 0 && parseFloat(amountPaid) >= finalTotal
+  const canProcessPayment = cart.length > 0
 
   // Payment success icons based on method
   const paymentMethodIcons = {
@@ -259,11 +339,26 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
                     <span className="text-[#E5FF29] font-mono text-xs">{lastPaymentDetails.transactionNumber}</span>
                   </div>
                 )}
+                
+                {/* Split Payments Display */}
+                {lastPaymentDetails.splitPayments && lastPaymentDetails.splitPayments.length > 1 && (
+                  <div className="pt-2 border-t border-gray-600">
+                    <div className="text-gray-300 text-xs mb-2">Payment Methods Used:</div>
+                    <div className="space-y-1">
+                      {lastPaymentDetails.splitPayments.map((payment, index) => (
+                        <div key={index} className="flex justify-between text-xs">
+                          <span className="text-gray-300 capitalize">{payment.method}:</span>
+                          <span className="text-white font-semibold">{formatCurrency(payment.amount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Change Display for Cash - Brand Yellow Background */}
-            {lastPaymentDetails.paymentMethod === 'cash' && lastPaymentDetails.change > 0 && (
+            {/* Change Display for All Payment Methods - Brand Yellow Background */}
+            {lastPaymentDetails.change > 0 && (
               <div className="bg-[#E5FF29] rounded-lg p-4 text-center">
                 <div className="text-black font-bold text-sm mb-1">💰 CHANGE TO GIVE</div>
                 <div className="text-3xl font-black text-black mb-1">{formatCurrency(lastPaymentDetails.change)}</div>
@@ -271,8 +366,8 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
               </div>
             )}
 
-            {/* Perfect payment for non-cash */}
-            {lastPaymentDetails.paymentMethod !== 'cash' && (
+            {/* Perfect payment when no change */}
+            {lastPaymentDetails.change === 0 && (
               <div className="bg-[#E5FF29]/20 rounded-lg p-3 text-center">
                 <div className="text-[#E5FF29] text-sm font-semibold">Perfect Payment ✓</div>
                 <div className="text-gray-300 text-xs mt-1">Exact amount processed</div>
@@ -481,7 +576,7 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
                   </Button>
                 </div>
                 <div className="bg-white rounded p-2 border border-gray-200">
-                  <div className="text-sm font-semibold text-black">{customer.name}</div>
+                  <div className="text-sm font-semibold text-black">{customer.first_name} {customer.last_name}</div>
                   {customer.phone && (
                     <div className="text-xs text-gray-600">{customer.phone}</div>
                   )}
@@ -491,15 +586,6 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
                     </div>
                   )}
                 </div>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="w-full h-6 px-2 text-xs bg-black/10 hover:bg-black/20 text-black hover:text-black" 
-                  style={{ border: '0.5px solid #000000' }}
-                  onClick={() => setShowCustomerModal(true)}
-                >
-                  Change Customer
-                </Button>
               </div>
             ) : (
               <div className="flex items-center justify-between">
@@ -509,7 +595,7 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
                   size="sm" 
                   className="h-6 px-2 text-xs bg-black/10 hover:bg-black/20 text-black hover:text-black" 
                   style={{ border: '0.5px solid #000000' }}
-                  onClick={() => setShowCustomerModal(true)}
+                  onClick={() => setShowCustomerSelect(true)}
                 >
                   Select
                 </Button>
@@ -517,28 +603,50 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
             )}
           </div>
 
-          {/* Amount Paid */}
-          <div>
-            <label className="block text-xs font-medium text-black mb-1">
-              Amount Paid
-            </label>
-            <Input
-              type="number"
-              placeholder="0.00"
-              value={amountPaid}
-              onChange={(e) => setAmountPaid(e.target.value)}
-              className="text-sm font-semibold h-8 bg-black/10 text-black placeholder-black/50 focus:ring-black/20"
-              style={{ border: '0.5px solid #000000' }}
-            />
-            {amountPaid && change >= 0 && (
-              <div className="mt-2 py-1 px-2 bg-gradient-to-r from-green-500/20 to-emerald-500/20 rounded-lg" style={{ border: '1px solid #000000' }}>
+          {/* Split Payment Display */}
+          {splitPayments.length > 0 && (
+            <div className="p-3 bg-blue-50/80 backdrop-blur-sm rounded-2xl border border-blue-200/50 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-green-800">Change Due:</span>
-                  <span className="text-sm font-bold text-green-800">{formatCurrency(change)}</span>
+                <h3 className="text-sm font-semibold text-blue-900">Payment Methods Used</h3>
+                <span className="text-xs text-blue-600">
+                  {totalPaid >= finalTotal ? 'Complete' : `${formatCurrency(remainingToPay)} remaining`}
+                </span>
+              </div>
+              
+              <div className="space-y-2">
+                {splitPayments.map((payment, index) => (
+                  <div key={index} className="flex items-center justify-between p-2 bg-white/80 rounded-lg border border-blue-100">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                        <span className="text-white text-xs font-bold">{index + 1}</span>
+                      </div>
+                      <span className="text-sm font-medium text-blue-900 capitalize">{payment.method}</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm font-semibold text-blue-900">{formatCurrency(payment.amount)}</span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => removeSplitPayment(index)}
+                        className="h-5 w-5 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {totalPaid >= finalTotal && (
+                <div className="bg-green-50 p-3 rounded-lg border border-green-200">
+                  <div className="text-center">
+                    <p className="text-sm font-semibold text-green-800">Payment Complete!</p>
+                    <p className="text-xs text-green-600">Ready to process transaction</p>
                 </div>
               </div>
             )}
           </div>
+          )}
 
           {/* Payment Buttons */}
           <div className="space-y-1">
@@ -552,7 +660,7 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
               ) : (
                 <>
                   <DollarSign className="h-4 w-4 mr-1" />
-                  Select Payment Method
+                  {splitPayments.length > 0 ? 'Add Payment Method' : 'Choose Payment Method'}
                 </>
               )}
             </Button>
@@ -589,18 +697,15 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
         currentTotal={total}
       />
 
-      <CustomerSelectionModal
-        isOpen={showCustomerModal}
-        onClose={() => setShowCustomerModal(false)}
-        onCustomerSelect={onCustomerSelect}
-        selectedCustomer={customer}
-      />
+
 
       <PaymentMethodModal
         isOpen={showPaymentMethodModal}
         onClose={() => setShowPaymentMethodModal(false)}
         onPaymentMethodSelect={handlePaymentMethodSelect}
-        totalAmount={finalTotal}
+        totalAmount={remainingToPay}
+        isSplitPayment={splitPayments.length > 0}
+        hasSelectedCustomer={!!customer}
       />
 
       <LaybyeModal
@@ -611,9 +716,19 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
         customer={customer}
         total={finalTotal}
       />
+
+      <CustomerSelectionModal
+        isOpen={showCustomerSelect}
+        onClose={() => setShowCustomerSelect(false)}
+        onCustomerSelect={onCustomerSelect}
+        selectedCustomer={customer}
+      />
+
     </>
   )
 }
+
+
 
 interface OrderItemCardProps {
   item: CartItem
@@ -690,4 +805,4 @@ const OrderItemCard: React.FC<OrderItemCardProps> = ({ item, onRemove, onUpdateQ
       </Button>
     </div>
   )
-} 
+}

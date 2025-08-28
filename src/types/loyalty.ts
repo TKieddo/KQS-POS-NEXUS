@@ -132,6 +132,14 @@ export interface ApiResponse<T> {
   message?: string
 }
 
-export interface CustomerApiResponse extends ApiResponse<Customer> {}
-export interface CustomersApiResponse extends ApiResponse<Customer[]> {}
-export interface CustomerStatsApiResponse extends ApiResponse<CustomerStats> {} 
+export interface CustomerApiResponse extends ApiResponse<Customer> {
+  // Customer-specific API response
+}
+
+export interface CustomersApiResponse extends ApiResponse<Customer[]> {
+  // Customers list API response
+}
+
+export interface CustomerStatsApiResponse extends ApiResponse<CustomerStats> {
+  // Customer stats API response
+} 

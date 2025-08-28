@@ -18,6 +18,7 @@ import LaybyeReserveSlipPreview from './laybye-reserve-slip-preview'
 import LaybyeCancellationReceiptPreview from './laybye-cancellation-receipt-preview'
 import ReturnsExchangeSlipReceiptPreview from './returns-exchange-slip-receipt-preview'
 import CustomerStatementReceiptPreview from './customer-statement-receipt-preview'
+import LaybyeFinalPaymentReceiptPreview from './laybye-final-payment-receipt-preview'
 import type { ReceiptTemplate } from '@/lib/receipt-template-service'
 
 interface TemplatePreviewModalProps {
@@ -40,57 +41,66 @@ const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
   const getTemplateComponent = () => {
     const name = template.name.toLowerCase()
     
-    if (name.includes('retail')) {
-      return <RetailReceiptPreview template={template} className="w-full max-w-md" />
+    // Debug: Log the template name to see what we're working with
+    console.log('Modal Template name:', template.name, 'Lowercase:', name)
+    
+    // Return the appropriate preview component based on template type
+    if (name.includes('cash up')) {
+      console.log('Modal Rendering CashUpReportReceiptPreview')
+      return <CashUpReportReceiptPreview className="w-full max-w-md" />
     }
-    if (name.includes('luxury')) {
-      return <LuxuryReceiptPreview className="w-full max-w-md" />
+    if (name.includes('final laybye payment')) {
+      return <LaybyeFinalPaymentReceiptPreview className="w-full max-w-md" />
     }
     if (name.includes('laybye') && name.includes('payment')) {
       return <LaybyePaymentReceiptPreview className="w-full max-w-md" />
     }
-    if (name.includes('quotation')) {
-      return <QuotationSlipReceiptPreview className="w-full max-w-md" />
+    if (name.includes('laybye reserve')) {
+      return <LaybyeReserveSlipPreview className="w-full max-w-md" />
     }
-    if (name.includes('delivery')) {
-      return <DeliverySlipReceiptPreview className="w-full max-w-md" />
-    }
-    if (name.includes('refund')) {
-      return <RefundSlipReceiptPreview className="w-full max-w-md" />
-    }
-    if (name.includes('cash-drop')) {
-      return <CashDropWithdrawReceiptPreview className="w-full max-w-md" />
-    }
-    if (name.includes('order')) {
-      return <OrderSlipReceiptPreview className="w-full max-w-md" />
-    }
-    if (name.includes('cash-up')) {
-      return <CashUpReportReceiptPreview className="w-full max-w-md" />
-    }
-    if (name.includes('till-session')) {
-      return <TillSessionReportReceiptPreview className="w-full max-w-md" />
+    if (name.includes('account payment')) {
+      return <AccountPaymentReceiptPreview className="w-full max-w-md" />
     }
     if (name.includes('intermediate')) {
       return <IntermediateBillReceiptPreview className="w-full max-w-md" />
     }
-    if (name.includes('account-payment')) {
-      return <AccountPaymentReceiptPreview className="w-full max-w-md" />
+    if (name.includes('till session')) {
+      return <TillSessionReportReceiptPreview className="w-full max-w-md" />
     }
-    if (name.includes('laybye-reserve')) {
-      return <LaybyeReserveSlipPreview className="w-full max-w-md" />
-    }
-    if (name.includes('laybye-cancellation')) {
+    if (name.includes('laybye cancellation')) {
       return <LaybyeCancellationReceiptPreview className="w-full max-w-md" />
     }
-    if (name.includes('returns-exchange')) {
+    if (name.includes('returns') && name.includes('exchange')) {
       return <ReturnsExchangeSlipReceiptPreview className="w-full max-w-md" />
     }
-    if (name.includes('customer-statement')) {
+    if (name.includes('refund')) {
+      return <RefundSlipReceiptPreview className="w-full max-w-md" />
+    }
+    if (name.includes('order')) {
+      return <OrderSlipReceiptPreview className="w-full max-w-md" />
+    }
+    if (name.includes('cash drop')) {
+      return <CashDropWithdrawReceiptPreview className="w-full max-w-md" />
+    }
+    if (name.includes('delivery')) {
+      return <DeliverySlipReceiptPreview className="w-full max-w-md" />
+    }
+    if (name.includes('quotation')) {
+      return <QuotationSlipReceiptPreview className="w-full max-w-md" />
+    }
+    if (name.includes('customer statement')) {
       return <CustomerStatementReceiptPreview className="w-full max-w-md" />
     }
+    if (name.includes('retail')) {
+      return <RetailReceiptPreview className="w-full max-w-md" />
+    }
+    if (name.includes('luxury')) {
+      return <LuxuryReceiptPreview className="w-full max-w-md" />
+    }
     
-    // Default to retail receipt
-    return <RetailReceiptPreview template={template} className="w-full max-w-md" />
+    // Default to retail receipt if no match
+    console.log('Modal Defaulting to RetailReceiptPreview')
+    return <RetailReceiptPreview className="w-full max-w-md" />
   }
 
   return (

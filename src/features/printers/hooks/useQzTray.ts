@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 // QZ Tray global type
-declare const qz: any
+declare var qz: any
 
 type QzStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
 

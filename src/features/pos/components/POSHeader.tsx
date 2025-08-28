@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useBranch } from '@/context/BranchContext'
 
+
 import { NotificationsPanel } from './NotificationsPanel'
 import { OnlineOrdersPanel } from './OnlineOrdersPanel'
 
@@ -90,6 +91,8 @@ export const POSHeader: React.FC<POSHeaderProps> = ({
       onShowHeldOrders()
     }
   }
+
+
 
   return (
     <>

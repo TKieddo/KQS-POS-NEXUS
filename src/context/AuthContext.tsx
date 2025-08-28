@@ -17,9 +17,21 @@ interface AuthContextType {
   updatePassword: (password: string) => Promise<{ error: { message: string } | null }>
   canAccessAdmin: boolean
   canAccessPOS: boolean
+  isPOSAuthenticated: boolean
+  getPOSBranchId: () => string | null
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
+
+// POS Authentication persistence keys
+const POS_AUTH_KEY = 'pos.auth.session'
+const POS_AUTH_TTL = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
+
+interface POSAuthSession {
+  user: AuthUser
+  branchId: string
+  timestamp: number
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
@@ -28,6 +40,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [isFetchingUser, setIsFetchingUser] = useState(false)
   const [lastFetchTime, setLastFetchTime] = useState(0)
+
+  // Helper functions for POS authentication persistence
+  const savePOSAuthSession = (user: AuthUser, branchId: string) => {
+    try {
+      if (typeof window === 'undefined') return
+      
+      const session: POSAuthSession = {
+        user,
+        branchId,
+        timestamp: Date.now()
+      }
+      
+      localStorage.setItem(POS_AUTH_KEY, JSON.stringify(session))
+      console.log('POS auth session saved to localStorage')
+    } catch (error) {
+      console.error('Error saving POS auth session:', error)
+    }
+  }
+
+  const loadPOSAuthSession = (): POSAuthSession | null => {
+    try {
+      if (typeof window === 'undefined') return null
+      
+      const stored = localStorage.getItem(POS_AUTH_KEY)
+      if (!stored) return null
+      
+      const session: POSAuthSession = JSON.parse(stored)
+      
+      // Check if session is still valid (within TTL)
+      const now = Date.now()
+      if (now - session.timestamp > POS_AUTH_TTL) {
+        console.log('POS auth session expired, clearing...')
+        localStorage.removeItem(POS_AUTH_KEY)
+        return null
+      }
+      
+      console.log('POS auth session loaded from localStorage')
+      return session
+    } catch (error) {
+      console.error('Error loading POS auth session:', error)
+      return null
+    }
+  }
+
+  const clearPOSAuthSession = () => {
+    try {
+      if (typeof window === 'undefined') return
+      localStorage.removeItem(POS_AUTH_KEY)
+      console.log('POS auth session cleared from localStorage')
+    } catch (error) {
+      console.error('Error clearing POS auth session:', error)
+    }
+  }
 
   useEffect(() => {
     const getInitialSession = async () => {
@@ -81,7 +146,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setIsFetchingUser(false)
           }
         } else {
-          console.log('No session found')
+          console.log('No Supabase session found, checking for POS auth session...')
+          
+          // Check for POS authentication session
+          const posSession = loadPOSAuthSession()
+          if (posSession) {
+            console.log('POS auth session found, restoring...')
+            setAppUser(posSession.user)
+            
+            // Update the session timestamp to extend the session
+            savePOSAuthSession(posSession.user, posSession.branchId)
+          } else {
+            console.log('No POS auth session found')
+            setAppUser(null)
+          }
         }
         
         setLoading(false)
@@ -147,6 +225,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (event === 'SIGNED_OUT') {
           // Clear any cached data
           console.log('User signed out, clearing session data')
+          clearPOSAuthSession()
         } else if (event === 'TOKEN_REFRESHED') {
           console.log('Token refreshed successfully')
         } else if (event === 'SIGNED_IN') {
@@ -179,6 +258,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const result = await unifiedAuthService.authenticatePOSUser(email, pin, branchId)
       if (result.success && result.user) {
         setAppUser(result.user)
+        
+        // Save POS authentication session for persistence
+        savePOSAuthSession(result.user, branchId)
+        
         return { error: null }
       }
       return { error: { message: result.error || 'POS authentication failed' } }
@@ -193,7 +276,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setAppUser(null)
       setUser(null)
       setSession(null)
-      // Clear any local storage or cached data
+      
+      // Clear all local storage data
+      clearPOSAuthSession()
       localStorage.removeItem('pos.branch.lock')
       localStorage.removeItem('pos.branch.selected')
     } catch (error) {
@@ -222,6 +307,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const canAccessAdmin = unifiedAuthService.canAccessAdmin(appUser)
   const canAccessPOS = unifiedAuthService.canAccessPOS(appUser)
 
+  // Helper functions for POS authentication
+  const isPOSAuthenticated = (() => {
+    try {
+      if (typeof window === 'undefined') return false
+      const stored = localStorage.getItem('pos.auth.session')
+      if (!stored) return false
+      
+      const session = JSON.parse(stored)
+      const now = Date.now()
+      return (now - session.timestamp) <= POS_AUTH_TTL
+    } catch {
+      return false
+    }
+  })()
+
+  const getPOSBranchId = (): string | null => {
+    try {
+      if (typeof window === 'undefined') return null
+      const stored = localStorage.getItem('pos.auth.session')
+      if (!stored) return null
+      
+      const session = JSON.parse(stored)
+      const now = Date.now()
+      if ((now - session.timestamp) > POS_AUTH_TTL) {
+        return null
+      }
+      
+      return session.branchId || null
+    } catch {
+      return null
+    }
+  }
+
   const value = {
     user,
     appUser,
@@ -233,7 +351,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     resetPassword,
     updatePassword,
     canAccessAdmin,
-    canAccessPOS
+    canAccessPOS,
+    isPOSAuthenticated,
+    getPOSBranchId
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

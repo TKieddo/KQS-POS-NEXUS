@@ -19,6 +19,14 @@ export const TEMPLATE_DEFINITIONS = [
     category: 'laybye'
   },
   {
+    id: 'laybye-final-payment',
+    name: 'Final Laybye Payment Receipt',
+    description: 'Final laybye payment receipt showing completion and collection ready status',
+    template_type: 'detailed' as const,
+    component: 'LaybyeFinalPaymentReceiptPreview',
+    category: 'laybye'
+  },
+  {
     id: 'laybye-reserve-slip',
     name: 'Laybye Reserve Slip',
     description: 'Initial laybye reservation slip',

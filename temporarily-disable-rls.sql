@@ -1,24 +1,29 @@
--- Temporarily disable RLS for data management tables during development
--- This will allow backups to work without authentication issues
+-- Temporarily Disable RLS for Testing
+-- Run this in your Supabase SQL Editor
+-- WARNING: This is for testing only. Re-enable RLS in production.
 
--- Disable RLS on data management tables
-ALTER TABLE data_management_settings DISABLE ROW LEVEL SECURITY;
-ALTER TABLE backup_history DISABLE ROW LEVEL SECURITY;
-ALTER TABLE export_history DISABLE ROW LEVEL SECURITY;
-ALTER TABLE cleanup_history DISABLE ROW LEVEL SECURITY;
+-- 1. Disable RLS on all customer-related tables
+ALTER TABLE customers DISABLE ROW LEVEL SECURITY;
+ALTER TABLE credit_accounts DISABLE ROW LEVEL SECURITY;
+ALTER TABLE credit_transactions DISABLE ROW LEVEL SECURITY;
 
--- Verify RLS is disabled
+-- 2. Verify RLS is disabled
 SELECT 
-    schemaname,
-    tablename,
-    rowsecurity as rls_enabled
+  'RLS Status:' as info,
+  schemaname,
+  tablename,
+  rowsecurity as rls_enabled
 FROM pg_tables 
-WHERE tablename IN ('data_management_settings', 'backup_history', 'export_history', 'cleanup_history');
+WHERE tablename IN ('customers', 'credit_accounts', 'credit_transactions');
 
--- Show current status
+-- 3. Test message
 SELECT 
-    'RLS disabled for data management tables' as status,
-    COUNT(*) as tables_affected
-FROM pg_tables 
-WHERE tablename IN ('data_management_settings', 'backup_history', 'export_history', 'cleanup_history')
-AND rowsecurity = false; 
+  'Testing mode:' as info,
+  'RLS temporarily disabled for testing' as status,
+  'Customer creation should now work without permission errors' as note;
+
+-- 4. Show current customers count
+SELECT 
+  'Current customers:' as info,
+  COUNT(*) as total_customers
+FROM customers; 

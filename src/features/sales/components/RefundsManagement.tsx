@@ -21,66 +21,9 @@ import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { formatCurrency } from '@/lib/utils'
 
-// Mock refund data
-const mockRefunds = [
-  {
-    id: 'REF-001',
-    originalTransaction: 'TXN-001',
-    customer: 'John Smith',
-    customerId: 'CUST-001',
-    items: [
-      { name: 'Premium T-Shirt', quantity: 1, originalPrice: 89.99, refundAmount: 89.99, reason: 'Wrong size' }
-    ],
-    totalRefund: 89.99,
-    refundMethod: 'original',
-    status: 'approved',
-    requestedBy: 'John Smith',
-    approvedBy: 'Sarah Johnson',
-    requestDate: '2024-01-25T10:30:00Z',
-    approvalDate: '2024-01-25T11:00:00Z',
-    processedDate: '2024-01-25T11:15:00Z',
-    reason: 'Customer received wrong size',
-    notes: 'Customer was very understanding, offered store credit for future purchase'
-  },
-  {
-    id: 'REF-002',
-    originalTransaction: 'TXN-003',
-    customer: 'Sarah Johnson',
-    customerId: 'CUST-002',
-    items: [
-      { name: 'Running Shoes', quantity: 1, originalPrice: 120.00, refundAmount: 120.00, reason: 'Defective product' }
-    ],
-    totalRefund: 120.00,
-    refundMethod: 'store_credit',
-    status: 'pending',
-    requestedBy: 'Sarah Johnson',
-    approvedBy: null,
-    requestDate: '2024-01-25T14:20:00Z',
-    approvalDate: null,
-    processedDate: null,
-    reason: 'Shoe sole came apart after first wear',
-    notes: 'Need to inspect the product before approval'
-  },
-  {
-    id: 'REF-003',
-    originalTransaction: 'TXN-005',
-    customer: 'Emma Davis',
-    customerId: 'CUST-004',
-    items: [
-      { name: 'Premium Watch', quantity: 1, originalPrice: 299.99, refundAmount: 250.00, reason: 'Partial refund - customer kept box' }
-    ],
-    totalRefund: 250.00,
-    refundMethod: 'original',
-    status: 'completed',
-    requestedBy: 'Emma Davis',
-    approvedBy: 'David Brown',
-    requestDate: '2024-01-24T16:45:00Z',
-    approvalDate: '2024-01-24T17:00:00Z',
-    processedDate: '2024-01-24T17:10:00Z',
-    reason: 'Customer changed mind, partial refund due to missing packaging',
-    notes: 'Customer kept the original box, deducted $49.99 for packaging'
-  }
-]
+import { RefundAdminService, AdminRefundItem } from '@/lib/refund-admin-service'
+import { useBranch } from '@/context/BranchContext'
+import { toast } from 'sonner'
 
 const refundStatusColors = {
   pending: 'text-orange-600 bg-orange-100',
@@ -96,15 +39,40 @@ const refundMethodIcons = {
 }
 
 export function RefundsManagement() {
+  const { selectedBranch } = useBranch()
+  const [refunds, setRefunds] = useState<AdminRefundItem[]>([])
+  const [loading, setLoading] = useState(true)
   const [selectedRefund, setSelectedRefund] = useState<any>(null)
   const [showNewRefund, setShowNewRefund] = useState(false)
+
+  useEffect(() => {
+    loadRefunds()
+  }, [selectedBranch])
+
+  const loadRefunds = async () => {
+    try {
+      setLoading(true)
+      const result = await RefundAdminService.getRefundHistory(selectedBranch?.id, 10)
+      if (result.success && result.data) {
+        setRefunds(result.data)
+      } else {
+        console.error('Failed to load refunds:', result.error)
+        toast.error('Failed to load refunds')
+      }
+    } catch (error) {
+      console.error('Error loading refunds:', error)
+      toast.error('Error loading refunds')
+    } finally {
+      setLoading(false)
+    }
+  }
   const [selectedFilter, setSelectedFilter] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
 
-  const filteredRefunds = mockRefunds.filter(refund => {
-    const matchesSearch = refund.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         refund.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         refund.originalTransaction.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredRefunds = refunds.filter(refund => {
+    const matchesSearch = refund.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         refund.refund_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         refund.original_sale_id.toLowerCase().includes(searchTerm.toLowerCase())
     
     const matchesFilter = selectedFilter === 'all' || refund.status === selectedFilter
     
@@ -113,7 +81,7 @@ export function RefundsManagement() {
 
   const totalRefunds = filteredRefunds.length
   const pendingRefunds = filteredRefunds.filter(r => r.status === 'pending').length
-  const totalRefundAmount = filteredRefunds.reduce((sum, r) => sum + r.totalRefund, 0)
+  const totalRefundAmount = filteredRefunds.reduce((sum, r) => sum + r.refund_amount, 0)
   const averageRefund = totalRefunds > 0 ? totalRefundAmount / totalRefunds : 0
 
   return (
@@ -252,48 +220,48 @@ export function RefundsManagement() {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredRefunds.map((refund) => {
-                const RefundMethodIcon = refundMethodIcons[refund.refundMethod as keyof typeof refundMethodIcons]
+                const RefundMethodIcon = refundMethodIcons[refund.refund_method as keyof typeof refundMethodIcons] || DollarSign
                 
                 return (
                   <tr key={refund.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
                         <div className="text-sm font-medium text-[hsl(var(--primary))]">
-                          {refund.id}
+                          {refund.refund_number}
                         </div>
                         <div className="text-sm text-gray-500">
-                          {new Date(refund.requestDate).toLocaleDateString()}
+                          {new Date(refund.processed_at).toLocaleDateString()}
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
                         <div className="text-sm font-medium text-[hsl(var(--primary))]">
-                          {refund.customer}
+                          {refund.customer_name}
                         </div>
                         <div className="text-sm text-gray-500">
-                          {refund.customerId}
+                          {refund.customer_email}
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-[hsl(var(--primary))]">
-                        {refund.originalTransaction}
+                        {refund.original_sale_id}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-lg font-semibold text-purple-600">
-                        {formatCurrency(refund.totalRefund)}
+                        {formatCurrency(refund.refund_amount)}
                       </div>
                       <div className="text-xs text-gray-500">
-                        {refund.items.length} items
+                        {refund.items_count} items
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         <RefundMethodIcon className="h-4 w-4 text-gray-400" />
                         <span className="text-sm font-medium capitalize">
-                          {refund.refundMethod.replace('_', ' ')}
+                          {refund.refund_method.replace('_', ' ')}
                         </span>
                       </div>
                     </td>
@@ -304,10 +272,10 @@ export function RefundsManagement() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-[hsl(var(--primary))]">
-                        {new Date(refund.requestDate).toLocaleDateString()}
+                        {new Date(refund.processed_at).toLocaleDateString()}
                       </div>
                       <div className="text-xs text-gray-500">
-                        {new Date(refund.requestDate).toLocaleTimeString()}
+                        {new Date(refund.processed_at).toLocaleTimeString()}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

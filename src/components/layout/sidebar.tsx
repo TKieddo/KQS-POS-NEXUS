@@ -24,7 +24,9 @@ import {
   Award,
   Target,
   Crown,
-  Gift
+  Gift,
+  Printer,
+  Building2
 } from 'lucide-react'
 import React from 'react'
 
@@ -36,52 +38,72 @@ const navigation = [
   },
   {
     name: 'Products',
-    href: '/admin/products',
+    href: '/products',
     icon: Package,
   },
   {
     name: 'Categories',
-    href: '/admin/categories',
+    href: '/categories',
     icon: DollarSign,
   },
   {
     name: 'Inventory',
-    href: '/admin/inventory',
+    href: '/inventory',
     icon: DollarSign,
   },
   {
     name: 'Customer List',
-    href: '/admin/customer-list',
+    href: '/customer-list',
+    icon: Users,
+  },
+  {
+    name: 'Customers',
+    href: '/customers',
     icon: Users,
   },
   {
     name: 'Sales',
-    href: '/admin/sales',
+    href: '/sales',
     icon: ShoppingCart,
   },
   {
     name: 'Lay-bye',
-    href: '/admin/laybye',
+    href: '/laybye',
     icon: Calendar,
   },
   {
     name: 'Refunds & Exchanges',
-    href: '/admin/refunds',
+    href: '/refunds',
     icon: RotateCcw,
   },
   {
+    name: 'Printers',
+    href: '/printers',
+    icon: Printer,
+  },
+  {
+    name: 'Receipts',
+    href: '/receipts',
+    icon: FileText,
+  },
+  {
+    name: 'Branch Management',
+    href: '/branch-management',
+    icon: Building2,
+  },
+  {
     name: 'Suppliers',
-    href: '/admin/suppliers',
+    href: '/suppliers',
     icon: DollarSign,
   },
   {
     name: 'Reports',
-    href: '/admin/reports',
+    href: '/reports',
     icon: TrendingUp,
   },
   {
     name: 'Settings',
-    href: '/admin/settings',
+    href: '/settings',
     icon: Settings,
   },
 ]
@@ -90,14 +112,15 @@ export const Sidebar = () => {
   const pathname = usePathname()
 
   return (
-    <aside className="w-64 bg-card border-r border-border flex flex-col h-full">
-      <div className="p-4 flex flex-col gap-4">
+    <aside className="w-64 bg-card border-r border-border flex flex-col h-screen">
+      <div className="flex-1 p-4 flex flex-col gap-4 overflow-hidden">
         {/* Branch Selector */}
         <div className="px-4">
           <BranchSelector />
         </div>
         
-        <nav className="px-4 space-y-2">
+        {/* Navigation - Scrollable if needed */}
+        <nav className="px-4 space-y-2 flex-1 overflow-y-auto">
           {navigation.map((item) => {
             const isActive = pathname === item.href
             return (
@@ -119,7 +142,8 @@ export const Sidebar = () => {
         </nav>
       </div>
       
-      <div className="absolute bottom-0 w-64 p-4 border-t border-border">
+      {/* Fixed Bottom User Info */}
+      <div className="flex-shrink-0 p-4 border-t border-border">
         <div className="flex items-center space-x-3">
           <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
             <span className="text-primary-foreground text-sm font-medium">A</span>

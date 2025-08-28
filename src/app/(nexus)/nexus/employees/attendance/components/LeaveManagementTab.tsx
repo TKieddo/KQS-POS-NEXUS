@@ -55,8 +55,8 @@ export function LeaveManagementTab({
   const [showLeaveRequestForm, setShowLeaveRequestForm] = useState(false)
   const [selectedEmployeeForLeave, setSelectedEmployeeForLeave] = useState<Employee | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
-  const [leaveTypeFilter, setLeaveTypeFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [leaveTypeFilter, setLeaveTypeFilter] = useState('all')
 
   // Filter leave requests
   const filteredLeaveRequests = useMemo(() => {
@@ -78,11 +78,11 @@ export function LeaveManagementTab({
       })
     }
 
-    if (statusFilter) {
+    if (statusFilter && statusFilter !== 'all') {
       filtered = filtered.filter(request => request.status === statusFilter)
     }
 
-    if (leaveTypeFilter) {
+    if (leaveTypeFilter && leaveTypeFilter !== 'all') {
       filtered = filtered.filter(request => request.leaveType === leaveTypeFilter)
     }
 
@@ -284,12 +284,12 @@ export function LeaveManagementTab({
         </div>
         
         <div className="flex gap-2">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <Select value={statusFilter || "all"} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-40">
               <SelectValue placeholder="All Status" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Status</SelectItem>
+                              <SelectItem value="all">All Status</SelectItem>
               {LEAVE_REQUEST_STATUSES.map((status) => (
                 <SelectItem key={status.value} value={status.value}>
                   {status.label}
@@ -298,12 +298,12 @@ export function LeaveManagementTab({
             </SelectContent>
           </Select>
 
-          <Select value={leaveTypeFilter} onValueChange={setLeaveTypeFilter}>
+          <Select value={leaveTypeFilter || "all"} onValueChange={setLeaveTypeFilter}>
             <SelectTrigger className="w-40">
               <SelectValue placeholder="All Types" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Types</SelectItem>
+                              <SelectItem value="all">All Types</SelectItem>
               {LEAVE_TYPES.map((type) => (
                 <SelectItem key={type.value} value={type.value}>
                   {type.label}

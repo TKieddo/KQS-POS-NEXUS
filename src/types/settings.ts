@@ -28,7 +28,9 @@ export interface BaseSetting {
 }
 
 // Global settings interface
-export interface GlobalSetting extends BaseSetting {}
+export interface GlobalSetting extends BaseSetting {
+  // Global settings extend base settings without additional properties
+}
 
 // Branch settings interface
 export interface BranchSetting {
@@ -253,7 +255,7 @@ export interface SettingsValidationError {
 // SETTINGS API TYPES
 // ========================================
 
-export interface SettingsApiResponse<T = any> {
+export interface SettingsApiResponse<T = unknown> {
   data?: T
   error?: string
   message?: string
@@ -303,7 +305,7 @@ export interface SettingsBackup {
 
 export interface ValidationRule {
   type: 'required' | 'min' | 'max' | 'pattern' | 'email' | 'url' | 'custom'
-  value?: any
+  value?: string | number | boolean
   message: string
 }
 
@@ -321,13 +323,13 @@ export interface SettingsTab {
   label: string
   icon: string
   description: string
-  component: React.ComponentType<any>
+  component: React.ComponentType<Record<string, unknown>>
 }
 
 export interface SettingsFieldProps {
   setting: EffectiveSetting
-  value: string | number | boolean | object
-  onChange: (value: string | number | boolean | object) => void
+  value: string | number | boolean | Record<string, unknown>
+  onChange: (value: string | number | boolean | Record<string, unknown>) => void
   error?: string
   disabled?: boolean
 }

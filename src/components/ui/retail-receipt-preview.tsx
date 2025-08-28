@@ -213,7 +213,7 @@ const RetailReceiptPreview: React.FC<RetailReceiptPreviewProps> = ({
         {/* Return & Exchange Policy */}
         {template.show_policy_section && (
           <div className="mb-3">
-            <div className="text-center font-bold text-gray-900 mb-1">Return &amp; Exchange Policy</div>
+            <div className="text-center font-bold text-gray-900 mb-1">Return & Exchange Policy</div>
             <div className="text-gray-700 text-xs leading-tight bg-gray-50 p-2 rounded-sm">
               {template.return_policy_english}
               <br /><br />

@@ -17,7 +17,11 @@ import {
   Database,
   FileText,
   Monitor,
-  Package
+  Package,
+  Building2,
+  Receipt,
+  Calculator,
+  Shield
 } from 'lucide-react'
 
 interface SettingsLink {
@@ -33,63 +37,63 @@ const settingsLinks: SettingsLink[] = [
   { 
     label: 'Business Info', 
     icon: Building, 
-    href: '/admin/settings/business-info',
+    href: '/settings/business-info',
     description: 'Manage business details and contact information',
     category: 'business'
   },
   { 
     label: 'General', 
     icon: Globe, 
-    href: '/admin/settings/general',
+    href: '/settings/general',
     description: 'Configure currency, language, and regional settings',
     category: 'business'
   },
   { 
     label: 'Payment Options', 
     icon: CreditCard, 
-    href: '/admin/settings/payment-options',
+    href: '/settings/payment-options',
     description: 'Set up payment methods and processors',
     category: 'business'
   },
   { 
     label: 'Sales Tax', 
     icon: DollarSign, 
-    href: '/admin/settings/sales-tax',
+    href: '/settings/sales-tax',
     description: 'Configure tax rates and tax display',
     category: 'business'
   },
   { 
     label: 'Loyalty Program', 
     icon: Star, 
-    href: '/admin/settings/loyalty',
+    href: '/settings/loyalty',
     description: 'Set up customer loyalty and rewards',
     category: 'business'
   },
   { 
     label: 'Product & Pricing', 
     icon: ShoppingCart, 
-    href: '/admin/settings/product-pricing',
+    href: '/settings/product-pricing',
     description: 'Configure product pricing rules and discounts',
     category: 'business'
   },
   { 
     label: 'Products Management', 
     icon: Package, 
-    href: '/admin/settings/products',
+    href: '/settings/products',
     description: 'Manage products, categories, brands, and product variants',
     category: 'business'
   },
   { 
     label: 'Branch Receipts', 
     icon: FileText, 
-    href: '/admin/settings/branch-receipts',
+    href: '/settings/branch-receipts',
     description: 'Manage receipt templates and business info per branch',
     category: 'business'
   },
   { 
     label: 'POS Settings', 
     icon: Monitor, 
-    href: '/admin/settings/pos',
+    href: '/settings/pos',
     description: 'Configure POS interface settings, laybye duration, and cashier options',
     category: 'business'
   },
@@ -98,68 +102,68 @@ const settingsLinks: SettingsLink[] = [
   { 
     label: 'Security Settings', 
     icon: Lock, 
-    href: '/admin/settings/security',
-    description: 'Configure authentication and security policies',
-    category: 'system'
-  },
-  { 
-    label: 'Till & Cash', 
-    icon: DollarSign, 
-    href: '/admin/settings/till-cash',
-    description: 'Manage till operations and cash handling',
+    href: '/settings/security',
+    description: 'Manage user roles, permissions, and security policies',
     category: 'system'
   },
   { 
     label: 'User Management', 
     icon: Users, 
-    href: '/admin/settings/user-management',
-    description: 'Manage user accounts and permissions',
-    category: 'system'
-  },
-  { 
-    label: 'Receipts', 
-    icon: FileText, 
-    href: '/admin/receipts',
-    description: 'Manage receipt templates and previews',
+    href: '/settings/user-management',
+    description: 'Manage users, employees, and access controls',
     category: 'system'
   },
   { 
     label: 'Printers', 
     icon: Printer, 
-    href: '/admin/printers',
-    description: 'Configure and manage printers',
+    href: '/settings/printers',
+    description: 'Configure and test receipt printers',
+    category: 'system'
+  },
+  { 
+    label: 'Receipts', 
+    icon: FileText, 
+    href: '/receipts',
+    description: 'Design and manage receipt templates and previews',
     category: 'system'
   },
   { 
     label: 'Notifications & Integrations', 
     icon: Bell, 
-    href: '/admin/settings/notifications-integrations',
-    description: 'Set up notifications and third-party integrations',
+    href: '/settings/notifications-integrations',
+    description: 'Configure notifications, email, SMS, and third-party integrations',
     category: 'system'
   },
   { 
     label: 'Reports & Export', 
-    icon: FileText, 
-    href: '/admin/settings/reports-export',
-    description: 'Configure report generation and data export',
+    icon: BarChart3, 
+    href: '/settings/reports-export',
+    description: 'Configure report formats, export settings, and data delivery',
+    category: 'system'
+  },
+  { 
+    label: 'Data Management', 
+    icon: Database, 
+    href: '/settings/data-management',
+    description: 'Backup, restore, and manage system data',
+    category: 'system'
+  },
+  { 
+    label: 'Till & Cash Management', 
+    icon: DollarSign, 
+    href: '/settings/till-cash',
+    description: 'Configure till settings, cash handling, and cashup procedures',
     category: 'system'
   },
   
   // Advanced Settings
   { 
-    label: 'Data Management', 
-    icon: Database, 
-    href: '/admin/settings/data-management',
-    description: 'Backup, restore, and manage data',
+    label: 'Advanced Settings', 
+    icon: Settings, 
+    href: '/settings/advanced',
+    description: 'Advanced system configuration and developer options',
     category: 'advanced'
   },
-  { 
-    label: 'Advanced', 
-    icon: Settings, 
-    href: '/admin/settings/advanced',
-    description: 'Advanced system configuration options',
-    category: 'advanced'
-  }
 ]
 
 interface SettingsHomeProps {

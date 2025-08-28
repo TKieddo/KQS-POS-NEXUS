@@ -148,10 +148,43 @@ export function LaybyeManagement() {
   }
 
   const getCustomerName = (customer: any) => {
-    if (customer?.first_name && customer?.last_name) {
-      return `${customer.first_name} ${customer.last_name}`
+    if (!customer) return 'Unknown Customer'
+    
+    // If customer has first_name and last_name
+    if (customer.first_name && customer.first_name.trim()) {
+      if (customer.last_name && customer.last_name.trim()) {
+        return `${customer.first_name} ${customer.last_name}`
+      } else {
+        return customer.first_name
+      }
     }
-    return customer?.email || 'Unknown Customer'
+    
+    // If only last_name
+    if (customer.last_name && customer.last_name.trim()) {
+      return customer.last_name
+    }
+    
+    // If email
+    if (customer.email && customer.email.trim()) {
+      return customer.email
+    }
+    
+    // If phone
+    if (customer.phone && customer.phone.trim()) {
+      return `Customer (${customer.phone})`
+    }
+    
+    return 'Unknown Customer'
+  }
+
+  const calculateRemainingBalance = (laybye: any) => {
+    const totalAmount = laybye.total_amount || 0
+    const depositAmount = laybye.deposit_amount || 0
+    const totalPayments = (laybye.laybye_payments || []).reduce((sum: number, payment: any) => sum + (payment.amount || 0), 0)
+    
+    // Calculate: Total - (Deposit + All Payments)
+    const remainingBalance = Math.max(0, totalAmount - depositAmount - totalPayments)
+    return remainingBalance
   }
 
   const isOverdue = (laybye: any) => {
@@ -308,7 +341,7 @@ export function LaybyeManagement() {
                     <div className="flex items-center gap-2 mb-1">
                       <User className="h-4 w-4 text-gray-400" />
                       <span className="text-sm font-medium text-gray-900">
-                        {getCustomerName(laybye.customers)}
+                        {laybye.customer_display_name || getCustomerName(laybye.customers) || 'Unknown Customer'}
                       </span>
                     </div>
                     {(laybye.customers?.phone || laybye.customers?.email) && (
@@ -348,7 +381,7 @@ export function LaybyeManagement() {
                     <div>
                       <div className="text-xs text-gray-500">Remaining</div>
                       <div className="text-sm font-semibold text-orange-600">
-                        {formatCurrency(laybye.remaining_amount)}
+                        {formatCurrency(calculateRemainingBalance(laybye))}
                       </div>
                       <div className="text-xs text-gray-500">
                         Due: {new Date(laybye.due_date).toLocaleDateString()}
@@ -498,7 +531,7 @@ export function LaybyeManagement() {
                       <div>
                         <p className="text-sm font-medium text-gray-600">Balance Remaining</p>
                         <p className="text-lg font-semibold text-orange-600">
-                          {formatCurrency(selectedLaybye.remaining_amount)}
+                          {formatCurrency(calculateRemainingBalance(selectedLaybye))}
                         </p>
                       </div>
                       <div>

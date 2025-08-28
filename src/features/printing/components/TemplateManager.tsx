@@ -19,6 +19,7 @@ import CashDropWithdrawReceiptPreview from '@/components/ui/cash-drop-withdraw-r
 import DeliverySlipReceiptPreview from '@/components/ui/delivery-slip-receipt-preview'
 import QuotationSlipReceiptPreview from '@/components/ui/quotation-slip-receipt-preview'
 import CustomerStatementReceiptPreview from '@/components/ui/customer-statement-receipt-preview'
+import LaybyeFinalPaymentReceiptPreview from '@/components/ui/laybye-final-payment-receipt-preview'
 import { printReceipt } from '@/lib/qz-printing'
 
 interface TemplateManagerProps {
@@ -33,7 +34,7 @@ interface TemplateManagerProps {
 const TemplateVisualPreview: React.FC<{ templateId: string }> = ({ templateId }) => {
   switch (templateId) {
     case 'laybye-final-payment':
-      return <LuxuryReceiptPreview className="scale-75 transform origin-top" />
+      return <LaybyeFinalPaymentReceiptPreview className="scale-75 transform origin-top" />
     case 'laybye-payment':
       return <LaybyePaymentReceiptPreview className="scale-75 transform origin-top" />
     case 'laybye-reserve-slip':

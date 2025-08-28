@@ -29,13 +29,16 @@ export const SettingsPageLayout: React.FC<SettingsPageLayoutProps> = ({
   onReset,
   isSaving = false,
   hasChanges = false,
-  backHref = '/admin/settings',
+  backHref = '/settings',
   backLabel = 'Back to Settings',
   showSaveButton = true,
   showResetButton = true,
   saveButtonText = 'Save Changes',
   resetButtonText = 'Reset'
 }) => {
+  if (!backHref) {
+    backHref = '/settings';
+  }
   return (
     <div className="p-6 min-h-screen bg-[hsl(var(--background))] flex flex-col gap-4">
       {/* Header */}

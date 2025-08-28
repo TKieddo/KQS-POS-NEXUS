@@ -62,7 +62,7 @@ export function DailyAttendanceTab({
   const [showBulkForm, setShowBulkForm] = useState(false)
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
-  const [selectedDivision, setSelectedDivision] = useState('')
+  const [selectedDivision, setSelectedDivision] = useState('all')
 
   // Filter employees based on search and division
   const filteredEmployees = useMemo(() => {
@@ -77,7 +77,7 @@ export function DailyAttendanceTab({
       )
     }
 
-    if (selectedDivision) {
+    if (selectedDivision && selectedDivision !== 'all') {
       filtered = filtered.filter(employee => employee.divisionId === selectedDivision)
     }
 
@@ -225,12 +225,12 @@ export function DailyAttendanceTab({
           
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-gray-600" />
-            <Select value={selectedDivision} onValueChange={handleDivisionChange}>
+            <Select value={selectedDivision || "all"} onValueChange={handleDivisionChange}>
               <SelectTrigger className="w-48">
                 <SelectValue placeholder="All Divisions" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Divisions</SelectItem>
+                <SelectItem value="all">All Divisions</SelectItem>
                 {divisions.map((division) => (
                   <SelectItem key={division.id} value={division.id}>
                     {division.name}

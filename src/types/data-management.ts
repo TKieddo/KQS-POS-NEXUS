@@ -63,7 +63,7 @@ export interface ExportHistory {
   export_size?: number // in bytes
   export_location?: string
   export_status: 'pending' | 'in_progress' | 'completed' | 'failed'
-  export_filters?: Record<string, any>
+  export_filters?: Record<string, string | number | boolean>
   export_notes?: string
   
   started_at: string
@@ -115,7 +115,7 @@ export interface ExportOptions {
   include_headers?: boolean
   max_rows?: number
   compression?: boolean
-  filters?: Record<string, any>
+  filters?: Record<string, string | number | boolean>
   notes?: string
 }
 

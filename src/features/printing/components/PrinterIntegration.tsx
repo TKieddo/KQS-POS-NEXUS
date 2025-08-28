@@ -77,7 +77,7 @@ export const PrinterIntegration: React.FC<PrinterIntegrationProps> = ({
   }
 
   const handleManagePrinters = () => {
-    router.push('/admin/printers')
+    router.push('/printers')
   }
 
   if (isLoading) {

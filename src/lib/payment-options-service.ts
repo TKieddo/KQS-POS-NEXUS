@@ -79,6 +79,8 @@ class PaymentOptionsService {
    */
   private async fetchPaymentOptionsFromDatabase(): Promise<PaymentOptionsData | null> {
     try {
+      console.log('🔍 Fetching payment options from database...')
+      
       const { data, error } = await supabase
         .from('global_settings')
         .select('setting_key, setting_value')
@@ -110,14 +112,18 @@ class PaymentOptionsService {
         ])
 
       if (error) {
-        console.error('Error loading payment options:', error)
+        console.error('❌ Error loading payment options:', error)
         return null
       }
+
+      console.log('📊 Raw database data:', data)
 
       // Convert database settings to PaymentOptionsData format
       const settingsMap = new Map(data?.map(item => [item.setting_key, item.setting_value]) || [])
       
-      return {
+      console.log('🗺️ Settings map:', Object.fromEntries(settingsMap))
+      
+      const result = {
         cash_enabled: settingsMap.get('cash_enabled') === 'true',
         cash_change_limit: settingsMap.get('cash_change_limit') || '1000.00',
         card_enabled: settingsMap.get('card_enabled') === 'true',
@@ -144,8 +150,11 @@ class PaymentOptionsService {
         credit_limit_default: settingsMap.get('credit_limit_default') || '1000.00',
         credit_interest_rate: settingsMap.get('credit_interest_rate') || '2.50'
       }
+      
+      console.log('✅ Processed payment options:', result)
+      return result
     } catch (error) {
-      console.error('Error fetching payment options:', error)
+      console.error('❌ Error fetching payment options:', error)
       return null
     }
   }
@@ -258,7 +267,9 @@ class PaymentOptionsService {
    */
   async getPaymentOption<T>(key: keyof PaymentOptionsData, defaultValue?: T): Promise<T | undefined> {
     const settings = await this.loadPaymentOptions()
-    return (settings?.[key] as T) ?? defaultValue
+    const value = (settings?.[key] as T) ?? defaultValue
+    console.log(`🔍 getPaymentOption(${key}):`, value, '(default:', defaultValue, ')')
+    return value
   }
 
   /**
@@ -274,36 +285,59 @@ class PaymentOptionsService {
    * Get enabled payment methods
    */
   async getEnabledPaymentMethods(): Promise<string[]> {
+    console.log('🔍 PaymentOptionsService: Getting enabled payment methods...')
     const methods: string[] = []
     
-    if (await this.getPaymentOption('cash_enabled', false)) {
+    const cashEnabled = await this.getPaymentOption('cash_enabled', false)
+    const cardEnabled = await this.getPaymentOption('card_enabled', false)
+    const mpesaEnabled = await this.getPaymentOption('mpesa_enabled', false)
+    const ecocashEnabled = await this.getPaymentOption('ecocash_enabled', false)
+    const airtelMoneyEnabled = await this.getPaymentOption('airtel_money_enabled', false)
+    const orangeMoneyEnabled = await this.getPaymentOption('orange_money_enabled', false)
+    const eftEnabled = await this.getPaymentOption('eft_enabled', false)
+    const laybyeEnabled = await this.getPaymentOption('laybye_enabled', false)
+    const creditEnabled = await this.getPaymentOption('credit_accounts_enabled', false)
+    
+    console.log('📊 Payment method status:')
+    console.log('  - Cash:', cashEnabled)
+    console.log('  - Card:', cardEnabled)
+    console.log('  - M-Pesa:', mpesaEnabled)
+    console.log('  - EcoCash:', ecocashEnabled)
+    console.log('  - Airtel Money:', airtelMoneyEnabled)
+    console.log('  - Orange Money:', orangeMoneyEnabled)
+    console.log('  - EFT:', eftEnabled)
+    console.log('  - Laybye:', laybyeEnabled)
+    console.log('  - Credit:', creditEnabled)
+    
+    if (cashEnabled) {
       methods.push('cash')
     }
-    if (await this.getPaymentOption('card_enabled', false)) {
+    if (cardEnabled) {
       methods.push('card')
     }
-    if (await this.getPaymentOption('mpesa_enabled', false)) {
+    if (mpesaEnabled) {
       methods.push('mpesa')
     }
-    if (await this.getPaymentOption('ecocash_enabled', false)) {
+    if (ecocashEnabled) {
       methods.push('ecocash')
     }
-    if (await this.getPaymentOption('airtel_money_enabled', false)) {
+    if (airtelMoneyEnabled) {
       methods.push('airtel_money')
     }
-    if (await this.getPaymentOption('orange_money_enabled', false)) {
+    if (orangeMoneyEnabled) {
       methods.push('orange_money')
     }
-    if (await this.getPaymentOption('eft_enabled', false)) {
+    if (eftEnabled) {
       methods.push('eft')
     }
-    if (await this.getPaymentOption('laybye_enabled', false)) {
+    if (laybyeEnabled) {
       methods.push('laybye')
     }
-    if (await this.getPaymentOption('credit_accounts_enabled', false)) {
+    if (creditEnabled) {
       methods.push('credit')
     }
 
+    console.log('✅ Final enabled methods:', methods)
     return methods
   }
 

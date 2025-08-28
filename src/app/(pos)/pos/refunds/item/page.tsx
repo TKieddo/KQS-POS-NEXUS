@@ -15,6 +15,7 @@ import { formatCurrency } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { useBranch } from '@/context/BranchContext'
+import { RefundService } from '@/features/pos/services/refund-service'
 
 interface SaleItem {
   id: string
@@ -212,7 +213,7 @@ export default function RefundItemPage() {
         salesMap.set(sale.id, sale)
       })
 
-      // Get refunded items to mark them
+      // Get refunded items to mark them - check both refund_items and sale_items.refunded
       const { data: refundedItems, error: refundError } = await supabase
         .from('refund_items')
         .select(`
@@ -231,6 +232,30 @@ export default function RefundItemPage() {
           refundDate: refund.created_at
         })
       })
+
+      // Also check sale_items.refunded column for any items marked as refunded
+      const { data: saleItemsRefunded, error: saleItemsRefundedError } = await supabase
+        .from('sale_items')
+        .select(`
+          id,
+          refund_amount,
+          refund_date
+        `)
+        .eq('refunded', true)
+
+      if (saleItemsRefundedError) {
+        console.warn('Error loading refunded sale items:', saleItemsRefundedError)
+      } else {
+        // Update refunded map with items from sale_items.refunded
+        saleItemsRefunded?.forEach(item => {
+          if (!refundedMap.has(item.id)) {
+            refundedMap.set(item.id, {
+              refundAmount: item.refund_amount,
+              refundDate: item.refund_date
+            })
+          }
+        })
+      }
 
       // Process items with the new query structure
       const combinedItems: SaleItem[] = items?.map((item: any) => {
@@ -290,9 +315,9 @@ export default function RefundItemPage() {
           email,
           phone,
           current_balance,
-          credit_limit
+          credit_limit,
+          branch_id
         `)
-        .eq('branch_id', selectedBranch.id)
         .eq('status', 'active')
 
       if (error) throw error
@@ -370,78 +395,37 @@ export default function RefundItemPage() {
       const item = saleItems.find(i => i.id === itemId)
       if (!item) throw new Error('Item not found')
 
-      // Create refund record
-      const { data: refund, error: refundError } = await supabase
-        .from('refunds')
-        .insert({
-          original_sale_id: item.saleId,
-          refund_number: `REF-${Date.now()}`,
-          customer_id: customerId || item.customerId,
-          refund_amount: refundAmount,
-          refund_method: refundMethod,
-          reason: reason,
-          status: 'completed',
-          processed_by: user?.id,
-          processed_at: new Date().toISOString(),
-          branch_id: selectedBranch?.id
-        })
-        .select()
-        .single()
-
-      if (refundError) throw refundError
-
-      // Create refund item record
-      const { error: refundItemError } = await supabase
-        .from('refund_items')
-        .insert({
-          refund_id: refund.id,
-          original_sale_item_id: itemId,
-          product_id: item.productId,
-          variant_id: item.variantId,
-          quantity: item.quantity,
-          unit_price: item.unitPrice,
-          refund_amount: refundAmount,
-          reason: reason
-        })
-
-      if (refundItemError) throw refundItemError
-
-      // If refunding to account, credit the customer
-      if (refundMethod === 'account' && customerId) {
-        // First get current balance
-        const { data: customerData, error: fetchError } = await supabase
-          .from('customers')
-          .select('current_balance')
-          .eq('id', customerId)
-          .single()
-
-        if (fetchError) throw fetchError
-
-        // Update with new balance
-        const { error: balanceError } = await supabase
-          .from('customers')
-          .update({ 
-            current_balance: (customerData?.current_balance || 0) + refundAmount
-          })
-          .eq('id', customerId)
-
-        if (balanceError) throw balanceError
+      // Use the RefundService to process the refund
+      const refundData = {
+        itemId: itemId,
+        refundAmount: refundAmount,
+        reason: reason,
+        refundMethod: refundMethod,
+        customerId: customerId,
+        processedBy: user?.id,
+        branchId: selectedBranch?.id
       }
-    
-    // Update local state
-      setSaleItems(prev => prev.map(i =>
-        i.id === itemId
-        ? {
-              ...i,
-            refunded: true,
-            refundAmount,
-            refundDate: new Date().toISOString()
-          }
-          : i
-    ))
-    
-    setShowRefundModal(false)
-    setSelectedItem(null)
+
+      const result = await RefundService.processRefund(refundData)
+
+      if (result.success) {
+        // Update local state to reflect the refund
+        setSaleItems(prev => prev.map(i =>
+          i.id === itemId
+            ? {
+                ...i,
+                refunded: true,
+                refundAmount: refundAmount,
+                refundDate: new Date().toISOString()
+              }
+            : i
+        ))
+        
+        setShowRefundModal(false)
+        setSelectedItem(null)
+      } else {
+        throw new Error(result.error || 'Failed to process refund')
+      }
     } catch (error) {
       console.error('Error processing refund:', error)
       throw error

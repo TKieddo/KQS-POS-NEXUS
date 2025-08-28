@@ -208,7 +208,7 @@ const LaybyePaymentReceiptPreview: React.FC<LaybyePaymentReceiptPreviewProps> = 
           <div className="text-center font-bold text-gray-900 mb-1">Lay-bye Policy</div>
           <div className="text-gray-700 text-xs leading-tight bg-gray-50 p-2 rounded-sm">
             NOTE: WE DO NOT CHANGE LAY-BYE. Exchanges will be for the same product (by size only) size. 
-            (Thepe khutla pele ho matsatsi a 7 hotlo chenchoa (size feela)). Chelete yona hae khutle Le ha ese felletsoe ke nako.
+            (Thepa khutla pele ho matsatsi a 7 hotlo chenchoa (size feela)). Chelete yona hae khutle Le ha ese felletsoe ke nako.
           </div>
         </div>
 

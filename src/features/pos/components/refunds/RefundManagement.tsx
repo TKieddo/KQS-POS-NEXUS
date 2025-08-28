@@ -6,7 +6,10 @@ import { RefundFilters } from './RefundFilters'
 import { RefundTabs } from './RefundTabs'
 import { RefundItemModal } from './RefundItemModal'
 import { RefundSaleModal } from './RefundSaleModal'
+import { useBranch } from '@/context/BranchContext'
+import { usePOSPrinting } from '@/lib/pos-printing-integration'
 import { formatCurrency } from '@/lib/utils'
+import { toast } from 'sonner'
 
 interface Sale {
   id: string
@@ -27,6 +30,8 @@ interface RefundManagementProps {
 }
 
 export const RefundManagement: React.FC<RefundManagementProps> = ({ onRefundComplete }) => {
+  const { selectedBranch } = useBranch()
+  const { createPrintingService } = usePOSPrinting()
   const [sales, setSales] = useState<Sale[]>([])
   const [filteredSales, setFilteredSales] = useState<Sale[]>([])
   const [searchTerm, setSearchTerm] = useState('')
@@ -165,7 +170,7 @@ export const RefundManagement: React.FC<RefundManagementProps> = ({ onRefundComp
     setShowRefundSaleModal(true)
   }
 
-  const handleRefundComplete = (refundData: any) => {
+  const handleRefundComplete = async (refundData: any) => {
     console.log('Refund completed:', refundData)
     
     // Update the sale status based on refund type
@@ -191,6 +196,22 @@ export const RefundManagement: React.FC<RefundManagementProps> = ({ onRefundComp
       return sale
     }))
 
+    // Print refund receipt
+    try {
+      const printingService = createPrintingService()
+      await printingService.printRefundReceipt({
+        transactionNumber: `REFUND-${Date.now()}`,
+        originalSaleNumber: refundData.originalSaleNumber || refundData.saleId,
+        customer: refundData.customerName,
+        items: refundData.items || [],
+        refundAmount: refundData.totalRefundAmount,
+        refundReason: refundData.reason || 'Customer request',
+        cashier: 'Cashier' // TODO: Get from auth context
+      })
+    } catch (printError) {
+      console.error('Error printing refund receipt:', printError)
+    }
+
     onRefundComplete?.(refundData)
   }
 
@@ -198,6 +219,33 @@ export const RefundManagement: React.FC<RefundManagementProps> = ({ onRefundComp
     setSearchTerm('')
     setStatusFilter('all')
     setDateFilter('all')
+  }
+
+  const handleTestPrint = async () => {
+    try {
+      const printingService = createPrintingService()
+      
+      // Test with sample refund data
+      const testRefundData = {
+        transactionNumber: `TEST-REFUND-${Date.now()}`,
+        originalSaleNumber: 'TEST-SALE-001',
+        customer: 'Test Customer',
+        items: [
+          { name: 'Test Product 1', quantity: 1, price: 25.00, total: 25.00 }
+        ],
+        refundAmount: 25.00,
+        refundReason: 'Test refund',
+        cashier: 'Test Cashier'
+      }
+      
+      toast.info('🖨️ Testing refund receipt printing...')
+      await printingService.printRefundReceipt(testRefundData)
+      toast.success('✅ Test refund receipt printed successfully!')
+      
+    } catch (error) {
+      console.error('Test refund printing failed:', error)
+      toast.error('❌ Test refund printing failed. Check console for details.')
+    }
   }
 
   return (
@@ -230,10 +278,20 @@ export const RefundManagement: React.FC<RefundManagementProps> = ({ onRefundComp
             <div className="text-sm text-gray-600">Refunded Amount</div>
           </div>
         </div>
+        
+        {/* Test Print Button */}
+        <div className="flex justify-center">
+          <button
+            onClick={handleTestPrint}
+            className="px-4 py-2 bg-yellow-100 border border-yellow-300 text-yellow-700 rounded-lg hover:bg-yellow-200 transition-colors text-sm font-medium"
+          >
+            🖨️ Test Refund Receipt Print
+          </button>
+        </div>
       </div>
 
       {/* Filters Section */}
-      <RefundFilters
+      {/* RefundFilters
         searchTerm={searchTerm}
         onSearchChange={setSearchTerm}
         statusFilter={statusFilter}
@@ -241,16 +299,16 @@ export const RefundManagement: React.FC<RefundManagementProps> = ({ onRefundComp
         dateFilter={dateFilter}
         onDateFilterChange={setDateFilter}
         onClearFilters={handleClearFilters}
-      />
+      /> */}
 
       {/* Tabs Section */}
-      <RefundTabs
+      {/* RefundTabs
         sales={filteredSales}
         onRefundItem={handleRefundItem}
         onRefundSale={handleRefundSale}
         activeTab={activeTab}
         onTabChange={setActiveTab}
-      />
+      /> */}
 
       {/* Refund Modals */}
       {selectedSale && (
@@ -261,7 +319,6 @@ export const RefundManagement: React.FC<RefundManagementProps> = ({ onRefundComp
               setShowRefundItemModal(false)
               setSelectedSale(null)
             }}
-            saleId={selectedSale.id}
             onRefundComplete={handleRefundComplete}
           />
           

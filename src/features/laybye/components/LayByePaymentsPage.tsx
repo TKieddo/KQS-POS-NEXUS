@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { CreditCard, DollarSign, User, Calendar, Clock, AlertCircle, CheckCircle, XCircle, Plus } from 'lucide-react'
 import { PageHeader } from '@/components/ui/page-header'
 import { SearchFilters } from '@/components/ui/search-filters'
@@ -8,6 +8,8 @@ import { StatsBar } from '@/components/ui/stats-bar'
 import { EmptyState } from '@/components/ui/empty-state'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { useSearchAndFilter } from '@/hooks/useSearchAndFilter'
+import { useBranch } from '@/context/BranchContext'
+import { useAuth } from '@/context/AuthContext'
 import { LayByeContractCard } from './LayByeContractCard'
 import { PaymentModal } from './PaymentModal'
 import { CancelModal } from './CancelModal'
@@ -50,22 +52,37 @@ interface LayByeContract {
 interface LayByePaymentsPageProps {
   contracts: LayByeContract[]
   isLoading: boolean
+  searchQuery?: string
+  onSearchChange?: (query: string) => void
+  statusFilter?: 'all' | 'active' | 'completed' | 'cancelled'
+  onStatusFilterChange?: (status: 'all' | 'active' | 'completed' | 'cancelled') => void
   onAddPayment: (contract: LayByeContract) => void
   onCancelContract: (contract: LayByeContract) => void
-  onProcessPayment: (paymentData: { amount: number; method: 'cash' | 'card' | 'transfer'; notes?: string; amountReceived?: number }) => Promise<void>
+  onProcessPayment: (paymentData: { amount: number; method: 'cash' | 'card' | 'transfer'; notes?: string; amountReceived?: number; isCompleted?: boolean }) => Promise<void>
   onProcessCancellation: (contractId: string, reason: string) => Promise<void>
 }
 
 export const LayByePaymentsPage: React.FC<LayByePaymentsPageProps> = ({
   contracts,
   isLoading,
+  searchQuery: externalSearchQuery,
+  onSearchChange: externalOnSearchChange,
+  statusFilter: externalStatusFilter,
+  onStatusFilterChange: externalOnStatusFilterChange,
   onAddPayment,
   onCancelContract,
   onProcessPayment,
   onProcessCancellation
 }) => {
-  const [searchQuery, setSearchQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed' | 'cancelled'>('all')
+  // Use external search state if provided, otherwise use internal state
+  const [internalSearchQuery, setInternalSearchQuery] = useState('')
+  const [internalStatusFilter, setInternalStatusFilter] = useState<'all' | 'active' | 'completed' | 'cancelled'>('all')
+  
+  const searchQuery = externalSearchQuery !== undefined ? externalSearchQuery : internalSearchQuery
+  const statusFilter = externalStatusFilter !== undefined ? externalStatusFilter : internalStatusFilter
+  
+  const setSearchQuery = externalOnSearchChange || setInternalSearchQuery
+  const setStatusFilter = externalOnStatusFilterChange || setInternalStatusFilter
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all')
   const [sortBy, setSortBy] = useState<'date' | 'amount' | 'customer' | 'progress'>('date')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
@@ -74,26 +91,74 @@ export const LayByePaymentsPage: React.FC<LayByePaymentsPageProps> = ({
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
-  const [successDetails, setSuccessDetails] = useState<{ paymentMethod: string; totalAmount: number; amountPaid: number; change: number; transactionNumber?: string } | null>(null)
+  const [successDetails, setSuccessDetails] = useState<{ paymentMethod: string; totalAmount: number; amountPaid: number; change: number; contract?: LayByeContract; isCompleted?: boolean } | null>(null)
 
-  // Use the search and filter hook
-  const filteredContracts = useSearchAndFilter({
-    data: contracts,
-    searchFields: ['contractNumber', 'customer.name', 'customer.phone'],
-    searchQuery,
-    filters: {
-      status: {
-        value: statusFilter,
-        field: 'status'
-      }
+  // Get branch and user information for receipt printing
+  const { selectedBranch } = useBranch()
+  const { user } = useAuth()
+
+  // Use contracts directly since we're doing server-side search
+  const filteredContracts = contracts
+
+  // Auto-print final receipt when success modal is displayed for completed laybye orders
+  useEffect(() => {
+    if (showSuccessModal && successDetails?.isCompleted && successDetails?.contract) {
+      const contract = successDetails.contract // Extract to avoid repeated checks
+      // Use setTimeout to avoid infinite loops and ensure modal is fully rendered
+      const timer = setTimeout(async () => {
+        try {
+          // Import the printing service
+          const { printTransactionReceipt } = await import('@/lib/receipt-printing-service')
+          
+          // Generate transaction number for final receipt
+          const now = new Date()
+          const transactionNumber = `FINAL-${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}-${now.getHours().toString().padStart(2,'0')}${now.getMinutes().toString().padStart(2,'0')}${now.getSeconds().toString().padStart(2,'0')}`
+          
+          // Create final receipt data
+          const finalReceiptData = {
+            transactionNumber,
+            laybyeId: contract.contractNumber,
+            paymentId: `FINAL-${Date.now()}`,
+            date: now.toLocaleDateString('en-GB'),
+            time: now.toLocaleTimeString('en-GB'),
+            cashier: user?.user_metadata?.full_name || user?.email || 'Cashier',
+            customer: contract.customer.name,
+            items: contract.items.map(item => ({
+              name: item.name,
+              quantity: item.quantity,
+              price: item.price,
+              total: item.price * item.quantity,
+              category: 'Accessories' // Default category
+            })),
+            total: successDetails.totalAmount,
+            paymentAmount: successDetails.totalAmount, // Total paid is now the full amount
+            totalPaid: successDetails.totalAmount, // Total paid is now the full amount
+            balanceRemaining: 0, // No balance remaining when completed
+            paymentMethod: successDetails.paymentMethod
+          }
+          
+          // Print the final receipt
+          await printTransactionReceipt({
+            transactionType: 'laybye_final',
+            branchId: selectedBranch?.id || '00000000-0000-0000-0000-000000000001',
+            transactionData: finalReceiptData
+          })
+          
+          console.log('Final laybye receipt printed successfully')
+        } catch (error) {
+          console.error('Error printing final receipt:', error)
+        }
+      }, 100)
+      
+      return () => clearTimeout(timer)
     }
-  })
+  }, [showSuccessModal, successDetails?.isCompleted, successDetails?.contract?.id, selectedBranch?.id, user?.user_metadata?.full_name, user?.email])
 
   // Calculate stats
   const stats = [
-    { label: 'Active', count: contracts.filter(c => c.status === 'active').length, color: 'bg-green-400' },
-    { label: 'Completed', count: contracts.filter(c => c.status === 'completed').length, color: 'bg-blue-400' },
-    { label: 'Cancelled', count: contracts.filter(c => c.status === 'cancelled').length, color: 'bg-red-400' }
+    { label: 'Active', value: contracts.filter(c => c.status === 'active').length.toString(), icon: CheckCircle, color: 'bg-green-400' },
+    { label: 'Completed', value: contracts.filter(c => c.status === 'completed').length.toString(), icon: CreditCard, color: 'bg-blue-400' },
+    { label: 'Cancelled', value: contracts.filter(c => c.status === 'cancelled').length.toString(), icon: XCircle, color: 'bg-red-400' }
   ]
 
   const statusFilterOptions = [
@@ -153,12 +218,13 @@ export const LayByePaymentsPage: React.FC<LayByePaymentsPageProps> = ({
     setShowCancelModal(true)
   }
 
-  const handleProcessPayment = async (paymentData: { amount: number; method: 'cash' | 'card' | 'transfer'; notes?: string; amountReceived?: number }) => {
+  const handleProcessPayment = async (paymentData: { amount: number; method: 'cash' | 'card' | 'transfer'; notes?: string; amountReceived?: number; isCompleted?: boolean }) => {
     if (!selectedContract) return
 
     setIsProcessing(true)
     try {
       await onProcessPayment(paymentData)
+      
       // Show success with change if cash
       const paid = paymentData.amountReceived ?? paymentData.amount
       const change = paymentData.method === 'cash' ? Math.max(0, paid - paymentData.amount) : 0
@@ -166,7 +232,9 @@ export const LayByePaymentsPage: React.FC<LayByePaymentsPageProps> = ({
         paymentMethod: paymentData.method,
         totalAmount: paymentData.amount,
         amountPaid: paid,
-        change
+        change,
+        isCompleted: paymentData.isCompleted || false,
+        contract: selectedContract // Pass the selected contract
       })
       setShowSuccessModal(true)
       setShowPaymentModal(false)
@@ -193,124 +261,247 @@ export const LayByePaymentsPage: React.FC<LayByePaymentsPageProps> = ({
     }
   }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
-      {/* Header */}
-      <PageHeader
-        title="Lay-Bye Payments"
-        icon={<CreditCard className="h-4 w-4 text-black" />}
-      />
-
-      {/* Stats */}
-      <StatsBar stats={stats} />
-
-      {/* Search and Filters */}
-      <SearchFilters
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        searchPlaceholder="Search contracts..."
-        filters={[
-          {
-            value: statusFilter,
-            onChange: setStatusFilter,
-            options: statusFilterOptions,
-            placeholder: 'All Status'
-          },
-          {
-            value: dateFilter,
-            onChange: setDateFilter,
-            options: dateFilterOptions,
-            placeholder: 'All Time'
-          },
-          {
-            value: sortBy,
-            onChange: setSortBy,
-            options: sortOptions,
-            placeholder: 'Sort By'
+  const handleSuccessModalOpen = async () => {
+    // Print receipt based on whether it's a final payment or regular payment
+    if (successDetails?.contract && successDetails) {
+      try {
+        // Import the printing service
+        const { printTransactionReceipt } = await import('@/lib/receipt-printing-service')
+        
+        // Generate transaction number
+        const now = new Date()
+        
+        // Debug logging
+        console.log('Print receipt debug:', {
+          isCompleted: successDetails.isCompleted,
+          remainingAmount: successDetails.contract.remainingAmount,
+          totalAmount: successDetails.contract.totalAmount,
+          paymentAmount: successDetails.totalAmount
+        })
+        
+        // Determine if this is a final payment (either by flag or by checking if remaining amount is 0)
+        const isFinalPayment = successDetails.isCompleted || 
+          (successDetails.contract.remainingAmount - successDetails.totalAmount <= 0)
+        
+        console.log('Is final payment:', isFinalPayment)
+        
+        const transactionNumber = isFinalPayment 
+          ? `FINAL-${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}-${now.getHours().toString().padStart(2,'0')}${now.getMinutes().toString().padStart(2,'0')}${now.getSeconds().toString().padStart(2,'0')}`
+          : `PAY-${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}-${now.getHours().toString().padStart(2,'0')}${now.getMinutes().toString().padStart(2,'0')}${now.getSeconds().toString().padStart(2,'0')}`
+        
+        if (isFinalPayment) {
+          // Use the new laybye final receipt template for final payments
+          const finalReceiptData = {
+            transactionNumber,
+            laybyeId: successDetails.contract!.contractNumber,
+            paymentId: `FINAL-${Date.now()}`,
+            date: now.toLocaleDateString('en-GB'),
+            time: now.toLocaleTimeString('en-GB'),
+            cashier: user?.user_metadata?.full_name || user?.email || 'Cashier',
+            customer: successDetails.contract!.customer.name,
+            items: successDetails.contract!.items.map(item => ({
+              name: item.name,
+              quantity: item.quantity,
+              price: item.price,
+              total: item.price * item.quantity,
+              category: 'Accessories' // Default category
+            })),
+            total: successDetails.contract!.totalAmount,
+            paymentAmount: successDetails.totalAmount,
+            totalPaid: successDetails.contract!.totalAmount, // Full amount paid
+            balanceRemaining: 0, // No balance remaining when completed
+            paymentMethod: successDetails.paymentMethod,
+            // Add laybye-specific completion data
+            laybyeStartDate: successDetails.contract!.createdAt,
+            completionDate: now.toISOString(),
+            totalDaysTaken: Math.ceil((new Date(now).getTime() - new Date(successDetails.contract!.createdAt).getTime()) / (1000 * 60 * 60 * 24)),
+            daysEarly: Math.max(0, 90 - Math.ceil((new Date(now).getTime() - new Date(successDetails.contract!.createdAt).getTime()) / (1000 * 60 * 60 * 24)))
           }
-        ]}
-      />
+          
+          // Print the final laybye receipt using the new template
+          await printTransactionReceipt({
+            transactionType: 'laybye_final',
+            branchId: selectedBranch?.id || '00000000-0000-0000-0000-000000000001',
+            transactionData: finalReceiptData
+          })
+          
+          console.log('Final laybye receipt printed successfully')
+        } else {
+          // Use regular retail receipt for regular payments
+          const receiptData = {
+            transactionNumber,
+            date: now.toLocaleDateString('en-GB'),
+            time: now.toLocaleTimeString('en-GB'),
+            cashier: user?.user_metadata?.full_name || user?.email || 'Cashier',
+            customer: successDetails.contract!.customer.name,
+            items: successDetails.contract!.items.map(item => ({
+              name: item.name,
+              quantity: item.quantity,
+              price: item.price,
+              total: item.price * item.quantity,
+              category: 'Accessories' // Default category
+            })),
+            subtotal: successDetails.totalAmount,
+            tax: 0, // No tax for laybye payments
+            total: successDetails.totalAmount,
+            paymentMethod: successDetails.paymentMethod,
+            amountReceived: successDetails.amountPaid,
+            change: successDetails.change,
+            // Add laybye-specific info
+            laybyeId: successDetails.contract!.contractNumber,
+            isLaybyePayment: true,
+            isLaybyeFinal: false
+          }
+          
+          // Use regular retail receipt for regular payments
+          await printTransactionReceipt({
+            transactionType: 'sale', // Use regular sale receipt
+            branchId: selectedBranch?.id || '00000000-0000-0000-0000-000000000001',
+            transactionData: receiptData
+          })
+          
+          console.log('Laybye payment receipt printed successfully')
+        }
+      } catch (error) {
+        console.error('Error printing receipt:', error)
+      }
+    }
+  }
 
-      {/* Content */}
-      <div className="max-w-7xl mx-auto p-4">
-        {isLoading ? (
-          <LoadingSpinner text="Loading contracts..." />
-        ) : filteredContracts.length === 0 ? (
-          <EmptyState
-            icon={<CreditCard className="h-8 w-8" />}
-            title="No lay-bye contracts found"
-            description={
-              searchQuery || statusFilter !== 'all'
-                ? 'Try adjusting your search or filters'
-                : 'No lay-bye contracts have been created yet'
-            }
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50">
+      {/* Header with enhanced styling */}
+      <div className="bg-white/80 backdrop-blur-xl border-b border-gray-200/50 shadow-sm">
+        <div className="max-w-7xl mx-auto px-6 py-8">
+          <PageHeader
+            title="Lay-Bye Payments"
+            icon={<CreditCard className="h-6 w-6 text-indigo-600" />}
           />
+        </div>
+      </div>
+
+      {/* Stats with enhanced styling */}
+      <div className="bg-white/60 backdrop-blur-xl border-b border-gray-200/30">
+        <div className="max-w-7xl mx-auto px-6 py-6">
+          <StatsBar stats={stats} />
+        </div>
+      </div>
+
+      {/* Search and Filters with enhanced styling */}
+      <div className="bg-white/70 backdrop-blur-xl border-b border-gray-200/40 shadow-sm">
+        <div className="max-w-7xl mx-auto px-6 py-6">
+          <SearchFilters
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            searchPlaceholder="Search by customer name, order number, or phone..."
+            filters={[
+              {
+                value: statusFilter,
+                onChange: (value: string) => setStatusFilter(value as 'all' | 'active' | 'completed' | 'cancelled'),
+                options: statusFilterOptions,
+                placeholder: 'All Status'
+              },
+              {
+                value: dateFilter,
+                onChange: (value: string) => setDateFilter(value as 'all' | 'today' | 'week' | 'month'),
+                options: dateFilterOptions,
+                placeholder: 'All Time'
+              },
+              {
+                value: sortBy,
+                onChange: (value: string) => setSortBy(value as 'date' | 'amount' | 'customer' | 'progress'),
+                options: sortOptions,
+                placeholder: 'Sort By'
+              }
+            ]}
+          />
+        </div>
+      </div>
+
+      {/* Main Content with enhanced spacing and styling */}
+      <div className="max-w-7xl mx-auto px-6 py-12">
+        {isLoading ? (
+          <div className="flex items-center justify-center min-h-[400px]">
+            <LoadingSpinner text="Loading contracts..." />
+          </div>
+        ) : filteredContracts.length === 0 ? (
+          <div className="flex items-center justify-center min-h-[400px]">
+            <EmptyState
+              icon={<CreditCard className="h-12 w-12 text-gray-400" />}
+              title="No lay-bye contracts found"
+              description={
+                searchQuery || statusFilter !== 'all'
+                  ? 'Try adjusting your search or filters'
+                  : 'No lay-bye contracts have been created yet'
+              }
+            />
+          </div>
         ) : (
           <>
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            {/* Enhanced Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
               {/* Today's Revenue */}
-              <div className="bg-gradient-to-br from-[#E5FF29]/10 to-[#E5FF29]/5 backdrop-blur-xl rounded-2xl border border-[#E5FF29]/20 shadow-xl p-6 hover:shadow-2xl transition-all duration-300 hover:scale-105">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="p-3 bg-[#E5FF29]/20 rounded-xl">
-                    <DollarSign className="h-6 w-6 text-black" />
+              <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 backdrop-blur-xl rounded-3xl border border-emerald-200/50 shadow-xl p-8 hover:shadow-2xl transition-all duration-500 hover:scale-105 group">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="p-4 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl shadow-lg group-hover:shadow-xl transition-all duration-300">
+                    <DollarSign className="h-8 w-8 text-white" />
                   </div>
                   <div className="text-right">
-                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Today's Revenue</p>
-                    <p className="text-2xl font-bold text-black">{getTodayRevenue().toFixed(2)}</p>
+                    <p className="text-sm font-semibold text-emerald-700 uppercase tracking-wider mb-1">Today's Revenue</p>
+                    <p className="text-3xl font-bold text-emerald-800">${getTodayRevenue().toFixed(2)}</p>
                   </div>
                 </div>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Contracts: {getTodayContracts().length}</span>
-                  <span className="text-green-600 font-semibold">+{getTodayPayments()} payments</span>
+                  <span className="text-emerald-600 font-medium">Contracts: {getTodayContracts().length}</span>
+                  <span className="text-emerald-700 font-semibold bg-emerald-100 px-3 py-1 rounded-full">+{getTodayPayments()} payments</span>
                 </div>
               </div>
               
               {/* Total Contracts */}
-              <div className="bg-gradient-to-br from-blue-500/10 to-blue-500/5 backdrop-blur-xl rounded-2xl border border-blue-200/20 shadow-xl p-6 hover:shadow-2xl transition-all duration-300 hover:scale-105">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="p-3 bg-blue-500/20 rounded-xl">
-                    <CreditCard className="h-6 w-6 text-blue-600" />
+              <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 backdrop-blur-xl rounded-3xl border border-blue-200/50 shadow-xl p-8 hover:shadow-2xl transition-all duration-500 hover:scale-105 group">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="p-4 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-lg group-hover:shadow-xl transition-all duration-300">
+                    <CreditCard className="h-8 w-8 text-white" />
                   </div>
                   <div className="text-right">
-                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Total Contracts</p>
-                    <p className="text-2xl font-bold text-blue-600">{contracts.length}</p>
+                    <p className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-1">Total Contracts</p>
+                    <p className="text-3xl font-bold text-blue-800">{contracts.length}</p>
                   </div>
                 </div>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Active: {contracts.filter(c => c.status === 'active').length}</span>
-                  <span className="text-blue-600 font-semibold">+{contracts.filter(c => c.status === 'completed').length} completed</span>
+                  <span className="text-blue-600 font-medium">Active: {contracts.filter(c => c.status === 'active').length}</span>
+                  <span className="text-blue-700 font-semibold bg-blue-100 px-3 py-1 rounded-full">+{contracts.filter(c => c.status === 'completed').length} completed</span>
                 </div>
               </div>
               
               {/* Outstanding Balance */}
-              <div className="bg-gradient-to-br from-orange-500/10 to-orange-500/5 backdrop-blur-xl rounded-2xl border border-orange-200/20 shadow-xl p-6 hover:shadow-2xl transition-all duration-300 hover:scale-105">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="p-3 bg-orange-500/20 rounded-xl">
-                    <AlertCircle className="h-6 w-6 text-orange-600" />
+              <div className="bg-gradient-to-br from-orange-50 to-orange-100/50 backdrop-blur-xl rounded-3xl border border-orange-200/50 shadow-xl p-8 hover:shadow-2xl transition-all duration-500 hover:scale-105 group">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="p-4 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl shadow-lg group-hover:shadow-xl transition-all duration-300">
+                    <AlertCircle className="h-8 w-8 text-white" />
                   </div>
                   <div className="text-right">
-                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Outstanding Balance</p>
-                    <p className="text-2xl font-bold text-orange-600">
-                      {contracts.reduce((sum, contract) => sum + contract.remainingAmount, 0).toFixed(2)}
+                    <p className="text-sm font-semibold text-orange-700 uppercase tracking-wider mb-1">Outstanding Balance</p>
+                    <p className="text-3xl font-bold text-orange-800">
+                      ${contracts.reduce((sum, contract) => sum + contract.remainingAmount, 0).toFixed(2)}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Overdue: {contracts.filter(c => c.status === 'active' && new Date(c.endDate) < new Date()).length}</span>
-                  <span className="text-orange-600 font-semibold">Due soon</span>
+                  <span className="text-orange-600 font-medium">Overdue: {contracts.filter(c => c.status === 'active' && new Date(c.endDate) < new Date()).length}</span>
+                  <span className="text-orange-700 font-semibold bg-orange-100 px-3 py-1 rounded-full">Due soon</span>
                 </div>
               </div>
               
               {/* Collection Rate */}
-              <div className="bg-gradient-to-br from-green-500/10 to-green-500/5 backdrop-blur-xl rounded-2xl border border-green-200/20 shadow-xl p-6 hover:shadow-2xl transition-all duration-300 hover:scale-105">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="p-3 bg-green-500/20 rounded-xl">
-                    <CheckCircle className="h-6 w-6 text-green-600" />
+              <div className="bg-gradient-to-br from-green-50 to-green-100/50 backdrop-blur-xl rounded-3xl border border-green-200/50 shadow-xl p-8 hover:shadow-2xl transition-all duration-500 hover:scale-105 group">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="p-4 bg-gradient-to-br from-green-500 to-green-600 rounded-2xl shadow-lg group-hover:shadow-xl transition-all duration-300">
+                    <CheckCircle className="h-8 w-8 text-white" />
                   </div>
                   <div className="text-right">
-                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Collection Rate</p>
-                    <p className="text-2xl font-bold text-green-600">
+                    <p className="text-sm font-semibold text-green-700 uppercase tracking-wider mb-1">Collection Rate</p>
+                    <p className="text-3xl font-bold text-green-800">
                       {contracts.length > 0 
                         ? Math.round((contracts.filter(c => c.status === 'completed').length / contracts.length) * 100)
                         : 0}%
@@ -318,23 +509,32 @@ export const LayByePaymentsPage: React.FC<LayByePaymentsPageProps> = ({
                   </div>
                 </div>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Completed: {contracts.filter(c => c.status === 'completed').length}</span>
-                  <span className="text-green-600 font-semibold">On track</span>
+                  <span className="text-green-600 font-medium">Completed: {contracts.filter(c => c.status === 'completed').length}</span>
+                  <span className="text-green-700 font-semibold bg-green-100 px-3 py-1 rounded-full">On track</span>
                 </div>
               </div>
             </div>
 
-            {/* Contracts Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {filteredContracts.map((contract) => (
-                <LayByeContractCard
-                  key={contract.id}
-                  contract={contract}
-                  onAddPayment={() => handleAddPayment(contract)}
-                  onCancelContract={() => handleCancelContract(contract)}
-                  getProgressPercentage={getProgressPercentage}
-                />
-              ))}
+            {/* Enhanced Contracts Grid */}
+            <div className="space-y-8">
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-bold text-gray-900">Lay-Bye Contracts</h2>
+                <div className="text-sm text-gray-600">
+                  Showing {filteredContracts.length} of {contracts.length} contracts
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+                {filteredContracts.map((contract) => (
+                  <LayByeContractCard
+                    key={contract.id}
+                    contract={contract}
+                    onAddPayment={() => handleAddPayment(contract)}
+                    onCancelContract={() => handleCancelContract(contract)}
+                    getProgressPercentage={getProgressPercentage}
+                  />
+                ))}
+              </div>
             </div>
           </>
         )}
@@ -378,8 +578,9 @@ export const LayByePaymentsPage: React.FC<LayByePaymentsPageProps> = ({
           change={successDetails.change}
           cart={[]}
           customer={null}
+          onPrintReceipt={handleSuccessModalOpen}
         />
       )}
     </div>
   )
-} 
+}

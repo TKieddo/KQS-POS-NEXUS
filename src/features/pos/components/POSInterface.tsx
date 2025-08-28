@@ -9,6 +9,7 @@ import { ProductDetailModal } from './ProductDetailModal'
 import { AddOrderModal } from './AddOrderModal'
 import { HeldOrdersModal } from './HeldOrdersModal'
 import { LaybyePaymentModal } from './LaybyePaymentModal'
+
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useCartContext } from '@/context/CartContext'
@@ -19,15 +20,23 @@ import { createLaybyeOrder, addLaybyePayment } from '@/lib/laybye-service'
 import { searchCustomers } from '@/lib/customers-service'
 import { checkBranchAccess, getUserBranchPermissions } from '@/lib/branch-access-service'
 import { getCurrentCashUpSession, createCashUpSession } from '@/lib/cashup-service'
+import { usePOSPrinting } from '@/lib/pos-printing-integration'
 import { useBranch } from '@/context/BranchContext'
 import { useAuth } from '@/context/AuthContext'
 import { toast } from 'sonner'
 import { formatCurrency } from '@/lib/utils'
 import type { CartItem, Customer, Product } from '../types'
 
+
+import { printTransactionReceipt } from '@/lib/receipt-printing-service'
+import { getReceiptTemplateForBranch } from '@/lib/hardcoded-receipt-templates'
+import { supabase } from '@/lib/supabase'
+import { getDefaultPrinter, isAutoPrintEnabled } from '@/lib/simple-printer-settings'
+
 export const POSInterface: React.FC = () => {
   const { selectedBranch } = useBranch()
   const { user } = useAuth()
+  const { createPrintingService } = usePOSPrinting()
   const { 
     cart, 
     customer, 
@@ -65,12 +74,45 @@ export const POSInterface: React.FC = () => {
     transactionNumber?: string
   } | null>(null)
 
+  const [receiptTemplate, setReceiptTemplate] = useState<any>(null)
+
+  // Function to get receipt template using hardcoded templates
+  const getReceiptTemplate = () => {
+    if (!selectedBranch?.id) return null
+    
+    try {
+      // Use hardcoded template storage
+      const template = getReceiptTemplateForBranch(selectedBranch.id, selectedBranch.name)
+      console.log('✅ Loaded hardcoded receipt template:', template)
+      return template
+    } catch (error) {
+      console.error('Error getting receipt template:', error)
+      return null
+    }
+  }
+
+  // Load receipt template on mount
+  useEffect(() => {
+    const initializePOS = async () => {
+      // Load receipt template from hardcoded storage
+      if (selectedBranch?.id) {
+        console.log('📝 Loading hardcoded receipt template...')
+        const template = getReceiptTemplate()
+        setReceiptTemplate(template)
+      }
+    }
+
+    initializePOS()
+  }, [selectedBranch?.id])
+
   // Handle product search
   useEffect(() => {
     if (searchQuery.trim()) {
       searchProducts(searchQuery)
     }
   }, [searchQuery, searchProducts])
+
+  // Templates are now hardcoded - no setup needed
 
   const handleProductSelect = (product: Product) => {
     setSelectedProduct(product)
@@ -84,7 +126,8 @@ export const POSInterface: React.FC = () => {
     setSelectedProduct(null)
   }
 
-  const handlePaymentComplete = async (paymentMethod: string, paymentAmount: number) => {
+  const handlePaymentComplete = async (paymentMethod: string, paymentAmount: number, splitPayments?: Array<{method: string, amount: number}>) => {
+    console.log('🎯 POSInterface received split payments:', splitPayments)
     if (cart.length === 0) {
       toast.error('No items in cart')
       return
@@ -136,7 +179,83 @@ export const POSInterface: React.FC = () => {
       const result = await createSale(saleData)
 
       if (result.success) {
-        toast.success('Sale completed successfully!')
+                // Auto-print receipt if enabled
+        try {
+          if (selectedBranch?.id) {
+            console.log('🔍 Checking auto-print conditions...')
+            console.log('🔍 Selected Branch ID:', selectedBranch.id)
+            
+            const autoPrintEnabled = isAutoPrintEnabled(selectedBranch.id)
+            const defaultPrinter = getDefaultPrinter(selectedBranch.id)
+            
+            console.log('🔍 Auto-print enabled:', autoPrintEnabled)
+            console.log('🔍 Default printer:', defaultPrinter)
+            
+            // Calculate total amount paid and change for split payments
+            const totalAmountPaid = splitPayments && splitPayments.length > 0 
+              ? splitPayments.reduce((sum, payment) => sum + payment.amount, 0)
+              : paymentAmount
+            const changeAmount = totalAmountPaid - finalTotal
+            
+            // Create compact receipt data using our new service
+            const receiptData = {
+              transactionNumber: result.data?.transaction_number || `SALE-${Date.now()}`,
+              date: new Date().toLocaleDateString('en-GB'),
+              time: new Date().toLocaleTimeString('en-GB'),
+              cashier: user?.user_metadata?.full_name || user?.email || 'Cashier',
+              customer: customer ? `${customer.first_name} ${customer.last_name}` : 'Walk-in Customer',
+              items: cart.map(item => ({
+                name: item.product.name,
+                quantity: item.quantity,
+                price: item.unitPrice,
+                total: item.totalPrice,
+                category: (item.product as any).category?.name || 'Accessories'
+              })),
+              subtotal: subtotal,
+              tax: taxAmount,
+              discount: discount,
+              total: finalTotal,
+              paymentMethod: paymentMethod,
+              amountPaid: totalAmountPaid,
+              change: changeAmount,
+              splitPayments: splitPayments || []
+            }
+            
+            console.log('🎯 Receipt data with split payments:', receiptData)
+
+            // Use our new compact receipt printing service
+            console.log('🖨️ Printing compact receipt for sale:', receiptData.transactionNumber)
+            
+            try {
+              const printResult = await printTransactionReceipt({
+                transactionType: 'sale',
+                branchId: selectedBranch.id,
+                transactionData: receiptData,
+                printerName: defaultPrinter || undefined
+              })
+              
+              if (printResult.success) {
+                if (printResult.method === 'qz_tray') {
+                  toast.success('✅ Sale completed and compact receipt printed via QZ Tray!')
+                } else {
+                  toast.success('✅ Sale completed and compact receipt printed via browser!')
+                }
+              } else {
+                console.warn('Receipt printing failed:', printResult.error)
+                toast.success('✅ Sale completed! (Receipt printing failed)')
+              }
+            } catch (printError) {
+              console.error('Receipt printing error:', printError)
+              toast.success('✅ Sale completed! (Receipt printing failed)')
+            }
+          } else {
+            toast.success('✅ Sale completed successfully!')
+          }
+        } catch (printError) {
+          console.error('Error auto-printing receipt:', printError)
+          toast.success('✅ Sale completed! Receipt printing failed.')
+        }
+
         clearCart()
         clearCustomer()
         setDiscount(0, 'percentage')
@@ -215,44 +334,109 @@ export const POSInterface: React.FC = () => {
     paymentMethod: string
   }) => {
     try {
-      // Process the deposit payment
-      const result = await addLaybyePayment({
-        laybye_id: laybyePaymentData.laybyeOrder.id,
-        amount: laybyePaymentData.depositAmount,
-        payment_method: paymentData.paymentMethod,
-        payment_date: new Date().toISOString(),
-        notes: `Initial deposit payment via ${paymentData.paymentMethod}`
+      // FIXED: Don't create a separate payment record for the deposit
+      // The deposit amount is already tracked in laybye_orders.deposit_amount
+      // Only create payment records for additional payments beyond the deposit
+      
+      // Generate transaction number
+      const now = new Date()
+      const transactionNumber = `TXN${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}-${now.getHours().toString().padStart(2,'0')}${now.getMinutes().toString().padStart(2,'0')}${now.getSeconds().toString().padStart(2,'0')}`
+      
+      // Calculate change
+      const change = paymentData.amountReceived - laybyePaymentData.depositAmount
+      
+      // Set payment success details
+      setLaybyePaymentDetails({
+        paymentMethod: paymentData.paymentMethod,
+        depositAmount: laybyePaymentData.depositAmount,
+        amountPaid: paymentData.amountReceived,
+        change: Math.max(0, change),
+        transactionNumber
       })
+      
+      // Print BOTH laybye reserve slip AND laybye payment receipt
+      try {
+        // 1. Print Laybye Reserve Slip (for customer to keep with goods)
+        const reserveReceiptData = {
+          transactionNumber: laybyePaymentData.laybyeOrder.order_number,
+          laybyeId: laybyePaymentData.laybyeOrder.id,
+          date: new Date().toLocaleDateString('en-GB'),
+          time: new Date().toLocaleTimeString('en-GB'),
+          cashier: user?.user_metadata?.full_name || user?.email || 'Cashier',
+          customer: customer ? `${customer.first_name} ${customer.last_name}` : 'Walk-in Customer',
+          items: cart.map(item => ({
+            name: item.product.name,
+            quantity: item.quantity,
+            price: item.unitPrice,
+            total: item.totalPrice,
+            category: (item.product as any).category?.name || 'Accessories'
+          })),
+          total: laybyePaymentData.total,
+          paymentAmount: laybyePaymentData.depositAmount,
+          balanceRemaining: laybyePaymentData.total - laybyePaymentData.depositAmount
+        }
 
-      if (result.success) {
-        // Generate transaction number
-        const now = new Date()
-        const transactionNumber = `TXN${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}-${now.getHours().toString().padStart(2,'0')}${now.getMinutes().toString().padStart(2,'0')}${now.getSeconds().toString().padStart(2,'0')}`
-        
-        // Calculate change
-        const change = paymentData.amountReceived - laybyePaymentData.depositAmount
-        
-        // Set payment success details
-        setLaybyePaymentDetails({
-          paymentMethod: paymentData.paymentMethod,
-          depositAmount: laybyePaymentData.depositAmount,
-          amountPaid: paymentData.amountReceived,
-          change: Math.max(0, change),
-          transactionNumber
+        const reservePrintResult = await printTransactionReceipt({
+          transactionType: 'laybye_reserve',
+          branchId: selectedBranch?.id || '00000000-0000-0000-0000-000000000001',
+          transactionData: reserveReceiptData
         })
-        
-        // Show payment success UI
-        setShowLaybyePaymentSuccess(true)
-        setShowLaybyePaymentModal(false)
-        
-        toast.success('Lay-bye order created and deposit paid successfully!')
-        clearCart()
-        clearCustomer()
-        setDiscount(0, 'percentage')
-        setLaybyePaymentData(null)
-      } else {
-        toast.error('Failed to record deposit payment')
+
+        // 2. Print Laybye Payment Receipt (for the payment transaction)
+        const paymentReceiptData = {
+          transactionNumber: transactionNumber,
+          laybyeId: laybyePaymentData.laybyeOrder.id,
+          paymentId: 'DEP-' + Date.now(), // Deposit payment ID
+          date: new Date().toLocaleDateString('en-GB'),
+          time: new Date().toLocaleTimeString('en-GB'),
+          cashier: user?.user_metadata?.full_name || user?.email || 'Cashier',
+          customer: customer ? `${customer.first_name} ${customer.last_name}` : 'Walk-in Customer',
+          items: cart.map(item => ({
+            name: item.product.name,
+            quantity: item.quantity,
+            price: item.unitPrice,
+            total: item.totalPrice,
+            category: (item.product as any).category?.name || 'Accessories'
+          })),
+          total: laybyePaymentData.total,
+          paymentAmount: laybyePaymentData.depositAmount,
+          totalPaid: laybyePaymentData.depositAmount, // This is the deposit payment
+          balanceRemaining: laybyePaymentData.total - laybyePaymentData.depositAmount,
+          paymentMethod: paymentData.paymentMethod
+        }
+
+        const paymentPrintResult = await printTransactionReceipt({
+          transactionType: 'laybye_payment',
+          branchId: selectedBranch?.id || '00000000-0000-0000-0000-000000000001',
+          transactionData: paymentReceiptData
+        })
+
+        // Show success message based on both print results
+        if (reservePrintResult.success && paymentPrintResult.success) {
+          if (reservePrintResult.method === 'qz_tray' && paymentPrintResult.method === 'qz_tray') {
+            toast.success('✅ Lay-bye created! Reserve slip & payment receipt printed via QZ Tray!')
+          } else {
+            toast.success('✅ Lay-bye created! Reserve slip & payment receipt printed via browser!')
+          }
+        } else if (reservePrintResult.success || paymentPrintResult.success) {
+          toast.success('✅ Lay-bye created! One receipt printed successfully.')
+        } else {
+          console.warn('Receipt printing failed:', { reserve: reservePrintResult.error, payment: paymentPrintResult.error })
+          toast.success('✅ Lay-bye created! (Receipt printing failed)')
+        }
+      } catch (printError) {
+        console.error('Error printing receipts:', printError)
+        toast.success('✅ Lay-bye created! (Receipt printing failed)')
       }
+        
+      // Show payment success UI
+      setShowLaybyePaymentSuccess(true)
+      setShowLaybyePaymentModal(false)
+      
+      clearCart()
+      clearCustomer()
+      setDiscount(0, 'percentage')
+      setLaybyePaymentData(null)
     } catch (error) {
       console.error('Error processing laybye payment:', error)
       toast.error('Failed to process payment')
@@ -329,6 +513,8 @@ export const POSInterface: React.FC = () => {
     setShowLaybyePaymentSuccess(false)
     setLaybyePaymentDetails(null)
   }
+
+
 
 
 
@@ -471,6 +657,8 @@ export const POSInterface: React.FC = () => {
           total={laybyePaymentData.total}
         />
       )}
+
+
     </div>
   )
 }

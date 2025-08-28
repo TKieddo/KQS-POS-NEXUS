@@ -7,8 +7,10 @@ import { StatsBar } from '@/components/ui/stats-bar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { formatCurrency } from '@/lib/utils'
+import { usePOSPrinting } from '@/lib/pos-printing-integration'
 import { StartSessionModal } from './StartSessionModal'
 import { VarianceModal } from './VarianceModal'
+import { toast } from 'sonner'
 
 interface CashUpSession {
   id: string
@@ -65,6 +67,7 @@ export const CashUpPage: React.FC<CashUpPageProps> = ({
   onCloseSession,
   onReconcileSession
 }) => {
+  const { createPrintingService } = usePOSPrinting()
   const [closingAmount, setClosingAmount] = useState(0)
   const [actualAmount, setActualAmount] = useState(0)
   const [expenses, setExpenses] = useState<CashUpSession['expenses']>([])
@@ -150,31 +153,58 @@ export const CashUpPage: React.FC<CashUpPageProps> = ({
     }, 500) // Small delay to ensure session is closed first
   }
 
-  const handlePrintReceipt = () => {
+  const handlePrintReceipt = async () => {
     if (!currentSession) return
     
-    // Generate cashup receipt data
-    const receiptData = {
-      sessionNumber: currentSession.sessionNumber,
-      cashier: currentSession.cashier,
-      startTime: new Date(currentSession.startTime).toLocaleString(),
-      endTime: new Date().toLocaleString(),
-      openingAmount: currentSession.openingAmount,
-      closingAmount: actualAmount,
-      expectedAmount: expectedAmount,
-      difference: difference,
-      sales: currentSession.sales,
-      refunds: currentSession.refunds,
-      expenses: expenses,
-      notes: notes,
-      totalExpenses: totalExpenses
+    try {
+      const printingService = createPrintingService()
+      await printingService.printCashUpReceipt({
+        transactionNumber: `CASHUP-${Date.now()}`,
+        sessionNumber: currentSession.sessionNumber,
+        cashier: currentSession.cashier,
+        openingFloat: currentSession.openingAmount,
+        cashSales: currentSession.sales.cash,
+        cardSales: currentSession.sales.card,
+        cashDrops: 0, // TODO: Get from session data
+        cashPayouts: 0, // TODO: Get from session data
+        closingBalance: actualAmount,
+        countedCash: actualAmount,
+        variance: difference,
+        notes: notes
+      })
+    } catch (error) {
+      console.error('Error printing cashup receipt:', error)
     }
-    
-    // TODO: Implement actual printing logic
-    console.log('Printing cashup receipt:', receiptData)
-    
-    // For now, we'll just show an alert
-    alert('Cashup receipt printed successfully!')
+  }
+
+  const handleTestPrint = async () => {
+    try {
+      const printingService = createPrintingService()
+      
+      // Test with sample cashup data
+      const testCashUpData = {
+        transactionNumber: `TEST-CASHUP-${Date.now()}`,
+        sessionNumber: 'TEST-SESSION-001',
+        cashier: 'Test Cashier',
+        openingFloat: 1000.00,
+        cashSales: 2500.00,
+        cardSales: 1500.00,
+        cashDrops: 500.00,
+        cashPayouts: 200.00,
+        closingBalance: 3300.00,
+        countedCash: 3250.00,
+        variance: -50.00,
+        notes: 'Test cash up session'
+      }
+      
+      toast.info('🖨️ Testing cashup receipt printing...')
+      await printingService.printCashUpReceipt(testCashUpData)
+      toast.success('✅ Test cashup receipt printed successfully!')
+      
+    } catch (error) {
+      console.error('Test cashup printing failed:', error)
+      toast.error('❌ Test cashup printing failed. Check console for details.')
+    }
   }
 
   const handleReconcileSession = () => {
@@ -536,6 +566,14 @@ export const CashUpPage: React.FC<CashUpPageProps> = ({
             className="px-8 border-black hover:bg-black hover:text-white"
           >
             Print Receipt
+          </Button>
+          
+          <Button
+            onClick={handleTestPrint}
+            variant="outline"
+            className="px-8 bg-yellow-50 border-yellow-300 text-yellow-700 hover:bg-yellow-100"
+          >
+            🖨️ Test Print
           </Button>
           
           {currentSession.status === 'closed' && (

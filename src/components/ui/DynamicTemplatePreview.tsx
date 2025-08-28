@@ -17,6 +17,7 @@ import DeliverySlipReceiptPreview from './delivery-slip-receipt-preview'
 import CashDropWithdrawReceiptPreview from './cash-drop-withdraw-receipt-preview'
 import QuotationSlipReceiptPreview from './quotation-slip-receipt-preview'
 import CustomerStatementReceiptPreview from './customer-statement-receipt-preview'
+import LaybyeFinalPaymentReceiptPreview from './laybye-final-payment-receipt-preview'
 import IntermediateBillReceiptPreview from './intermediate-bill-receipt-preview'
 
 interface DynamicTemplatePreviewProps {
@@ -28,6 +29,7 @@ interface DynamicTemplatePreviewProps {
 const TEMPLATE_COMPONENTS: Record<string, React.ComponentType<any>> = {
   'LuxuryReceiptPreview': LuxuryReceiptPreview,
   'LaybyePaymentReceiptPreview': LaybyePaymentReceiptPreview,
+  'LaybyeFinalPaymentReceiptPreview': LaybyeFinalPaymentReceiptPreview,
   'LaybyeReserveSlipPreview': LaybyeReserveSlipPreview,
   'RetailReceiptPreview': RetailReceiptPreview,
   'AccountPaymentReceiptPreview': AccountPaymentReceiptPreview,

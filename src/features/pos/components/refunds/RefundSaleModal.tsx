@@ -9,7 +9,7 @@ import {
   Receipt,
   DollarSign,
   CreditCard,
-  Cash
+  Banknote
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -151,7 +151,7 @@ export const RefundSaleModal: React.FC<RefundSaleModalProps> = ({
       case 'card':
         return <CreditCard className="h-4 w-4" />
       case 'cash':
-        return <Cash className="h-4 w-4" />
+      return <Banknote className="h-4 w-4" />
       default:
         return <DollarSign className="h-4 w-4" />
     }

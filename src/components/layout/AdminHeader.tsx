@@ -126,7 +126,7 @@ export const AdminHeader = () => {
                   <button
                     onClick={() => {
                       setIsDropdownOpen(false)
-                      router.push('/admin/settings/general')
+                      router.push('/settings/general')
                     }}
                     className="w-full flex items-center px-4 py-2 text-sm text-foreground hover:bg-accent transition-colors"
                   >

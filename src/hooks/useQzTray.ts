@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-declare const qz: any;
+declare var qz: any;
 
 export function useQzTray() {
   const [isConnected, setIsConnected] = useState(false);

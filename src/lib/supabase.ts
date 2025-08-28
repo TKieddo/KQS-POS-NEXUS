@@ -11,6 +11,19 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 })
 
+export const generateTransactionNumber = () => {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  const hours = String(now.getHours()).padStart(2, '0')
+  const minutes = String(now.getMinutes()).padStart(2, '0')
+  const seconds = String(now.getSeconds()).padStart(2, '0')
+  const random = Math.random().toString(36).substring(2, 8).toUpperCase()
+  
+  return `TXN${year}${month}${day}-${hours}${minutes}${seconds}-${random}`
+}
+
 // Storage bucket names
 export const STORAGE_BUCKETS = {
   PRODUCT_IMAGES: 'product-images',
@@ -997,12 +1010,7 @@ export type Settings = {
 // UTILITY FUNCTIONS
 // ========================================
 
-// Generate unique transaction numbers
-export const generateTransactionNumber = (): string => {
-  const timestamp = Date.now().toString()
-  const random = Math.random().toString(36).substring(2, 8).toUpperCase()
-  return `TXN-${timestamp}-${random}`
-}
+// Generate unique transaction numbers (duplicate removed)
 
 // Generate unique order numbers
 export const generateOrderNumber = (): string => {

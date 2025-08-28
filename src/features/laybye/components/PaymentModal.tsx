@@ -46,7 +46,7 @@ interface PaymentModalProps {
   contract: LayByeContract
   isOpen: boolean
   onClose: () => void
-  onSubmit: (paymentData: { amount: number; method: 'cash' | 'card' | 'transfer'; notes?: string; amountReceived?: number }) => void
+  onSubmit: (paymentData: { amount: number; method: 'cash' | 'card' | 'transfer'; notes?: string; amountReceived?: number; isCompleted?: boolean }) => void
   isProcessing: boolean
 }
 
@@ -84,14 +84,24 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   }
 
   const processPayment = async (amount: number, method: 'cash' | 'card' | 'transfer', notes?: string, amountReceived?: number) => {
-    await addLaybyePayment({
+    const result = await addLaybyePayment({
       laybye_id: contract.id,
       amount,
       payment_method: method,
       payment_date: new Date().toISOString(),
       notes
     })
-    onSubmit({ amount, method, notes, amountReceived })
+    
+    // Check if the laybye order was completed by this payment
+    const isCompleted = result.success && result.data?.new_status === 'completed'
+    
+    onSubmit({ 
+      amount, 
+      method, 
+      notes, 
+      amountReceived,
+      isCompleted: isCompleted || false
+    })
   }
 
   return (

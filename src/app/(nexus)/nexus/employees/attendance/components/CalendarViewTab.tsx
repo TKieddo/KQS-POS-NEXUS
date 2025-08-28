@@ -41,7 +41,7 @@ export function CalendarViewTab({
   onEmployeeSelect
 }: CalendarViewTabProps) {
   const [currentDate, setCurrentDate] = useState(new Date())
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState(selectedEmployee)
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState(selectedEmployee || 'all')
 
   // Get current month and year
   const currentMonth = currentDate.getMonth()
@@ -75,7 +75,7 @@ export function CalendarViewTab({
     const dateString = date.toISOString().split('T')[0]
     return attendanceRecords.filter(record => 
       record.date === dateString && 
-      (selectedEmployeeId ? record.employeeId === selectedEmployeeId : true)
+      (selectedEmployeeId && selectedEmployeeId !== 'all' ? record.employeeId === selectedEmployeeId : true)
     )
   }
 
@@ -182,12 +182,12 @@ export function CalendarViewTab({
 
         <div className="flex items-center gap-2">
           <Users className="h-4 w-4 text-gray-600" />
-          <Select value={selectedEmployeeId} onValueChange={handleEmployeeChange}>
+          <Select value={selectedEmployeeId || "all"} onValueChange={handleEmployeeChange}>
             <SelectTrigger className="w-64">
               <SelectValue placeholder="All Employees" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Employees</SelectItem>
+                              <SelectItem value="all">All Employees</SelectItem>
               {employees.map((employee) => (
                 <SelectItem key={employee.id} value={employee.id}>
                   {employee.firstName} {employee.lastName} ({employee.employeeId})

@@ -28,13 +28,20 @@ export const BranchProvider = ({ children }: BranchProviderProps) => {
   const [isLoading, setIsLoading] = useState(true)
   const [isLocked, setIsLocked] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
+  const [isRestoring, setIsRestoring] = useState(false)
+  const [isClient, setIsClient] = useState(false)
 
   const BRANCHES_CACHE_KEY = 'branches.cache.v1'
   const BRANCHES_CACHE_TTL_MS = 5 * 60 * 1000
 
+  // Ensure we're on the client side to avoid hydration mismatches
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
+
   const readCache = (): { items: Branch[]; ts: number } | null => {
     try {
-      if (typeof window === 'undefined') return null
+      if (typeof window === 'undefined' || !isClient) return null
       const raw = localStorage.getItem(BRANCHES_CACHE_KEY)
       if (!raw) return null
       return JSON.parse(raw)
@@ -45,53 +52,114 @@ export const BranchProvider = ({ children }: BranchProviderProps) => {
 
   const writeCache = (items: Branch[]) => {
     try {
-      if (typeof window === 'undefined') return
+      if (typeof window === 'undefined' || !isClient) return
       localStorage.setItem(BRANCHES_CACHE_KEY, JSON.stringify({ items, ts: Date.now() }))
     } catch {}
   }
 
   const fetchBranches = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('branches')
-          .select('id,name,address,phone,email,is_active,created_at,updated_at')
-          .eq('is_active', true)
-          .order('name')
+    try {
+      const { data, error } = await supabase
+        .from('branches')
+        .select('id,name,address,phone,email,is_active,created_at,updated_at')
+        .eq('is_active', true)
+        .order('name')
 
-        if (error) throw error
-        const rows = data || []
+      if (error) throw error
+      const rows = data || []
 
-        const centralWarehouse = rows.find((branch: any) => branch.id === CENTRAL_WAREHOUSE_ID)
-        const otherBranches = rows.filter((branch: any) => branch.id !== CENTRAL_WAREHOUSE_ID)
+      const centralWarehouse = rows.find((branch: any) => branch.id === CENTRAL_WAREHOUSE_ID)
+      const otherBranches = rows.filter((branch: any) => branch.id !== CENTRAL_WAREHOUSE_ID)
 
-        const allBranches = centralWarehouse ? [centralWarehouse, ...otherBranches] : otherBranches
-        setBranches(allBranches)
-        writeCache(allBranches)
+      const allBranches = centralWarehouse ? [centralWarehouse, ...otherBranches] : otherBranches
+      setBranches(allBranches)
+      writeCache(allBranches)
 
-        if (!selectedBranch) {
-          setSelectedBranch(centralWarehouse || allBranches[0] || null)
+      // Only set default branch if no branch is currently selected AND no POS session exists
+      if (!selectedBranch) {
+        // Check for POS authentication session first
+        try {
+          if (typeof window !== 'undefined') {
+            const posAuthStored = localStorage.getItem('pos.auth.session')
+            if (posAuthStored) {
+              const posSession = JSON.parse(posAuthStored)
+              const now = Date.now()
+              const POS_AUTH_TTL = 24 * 60 * 60 * 1000 // 24 hours
+              
+              // If POS session is valid, find and set that branch
+              if ((now - posSession.timestamp) <= POS_AUTH_TTL && posSession.branchId) {
+                const posBranch = allBranches.find((b: any) => b.id === posSession.branchId)
+                if (posBranch) {
+                  console.log('Setting branch from POS session:', posBranch.name)
+                  setSelectedBranch(posBranch)
+                  setIsLocked(true)
+                  return
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error checking POS session:', error)
         }
-        setError(null)
-      } catch (error: any) {
-        console.error('Error fetching branches:', error)
-        // Do not insert demo/mock data; leave branches empty on failure
-        setBranches([])
-        setSelectedBranch(null)
-        setError(error?.message || 'Failed to load branches')
-      } finally {
-        setIsLoading(false)
+        
+        // If no valid POS session, set Central Warehouse as default
+        console.log('Setting default Central Warehouse branch')
+        setSelectedBranch(centralWarehouse || allBranches[0] || null)
       }
+      setError(null)
+    } catch (error: any) {
+      console.error('Error fetching branches:', error)
+      // Do not insert demo/mock data; leave branches empty on failure
+      setBranches([])
+      setSelectedBranch(null)
+      setError(error?.message || 'Failed to load branches')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   // Fetch branches on mount with local cache hydration
   useEffect(() => {
+    // Only run cache restoration on client side
+    if (!isClient) {
+      fetchBranches()
+      return
+    }
+    
     const cached = readCache()
     if (cached && Date.now() - cached.ts < BRANCHES_CACHE_TTL_MS) {
       const cachedItems = cached.items || []
       if (cachedItems.length > 0) {
         setBranches(cachedItems)
         if (!selectedBranch) {
+          // Check for POS authentication session first
+          try {
+            if (typeof window !== 'undefined') {
+              const posAuthStored = localStorage.getItem('pos.auth.session')
+              if (posAuthStored) {
+                const posSession = JSON.parse(posAuthStored)
+                const now = Date.now()
+                const POS_AUTH_TTL = 24 * 60 * 60 * 1000 // 24 hours
+                
+                // If POS session is valid, find and set that branch
+                if ((now - posSession.timestamp) <= POS_AUTH_TTL && posSession.branchId) {
+                  const posBranch = cachedItems.find((b: any) => b.id === posSession.branchId)
+                  if (posBranch) {
+                    console.log('Setting branch from POS session (cache):', posBranch.name)
+                    setSelectedBranch(posBranch)
+                    setIsLocked(true)
+                    return
+                  }
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Error checking POS session in cache:', error)
+          }
+          
+          // If no valid POS session, set Central Warehouse as default
           const central = cachedItems.find((b: any) => b.id === CENTRAL_WAREHOUSE_ID) || null
+          console.log('Setting default Central Warehouse branch (cache)')
           setSelectedBranch(central || cachedItems[0] || null)
         }
         setIsLoading(false)
@@ -99,14 +167,22 @@ export const BranchProvider = ({ children }: BranchProviderProps) => {
     }
     fetchBranches()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [isClient])
 
   // Lock helpers
   useEffect(() => {
+    // Only run on client side to avoid hydration mismatches
+    if (!isClient) return
+    
     // Restore selection/lock for POS sessions
     try {
       const isPOSRoute = typeof window !== 'undefined' && window.location?.pathname?.startsWith('/pos')
       if (!isPOSRoute) return
+      
+      setIsRestoring(true)
+      console.log('Starting branch restoration process...')
+      
+      // First check for branch lock
       const stored = typeof window !== 'undefined' ? localStorage.getItem('pos.branch.lock') : null
       if (stored) {
         const { branchId } = JSON.parse(stored)
@@ -114,10 +190,35 @@ export const BranchProvider = ({ children }: BranchProviderProps) => {
         if (found) {
           setSelectedBranch(found)
           setIsLocked(true)
+          console.log('Branch selection restored from localStorage:', found.name)
+          setIsRestoring(false)
+          return
         }
       }
-    } catch {}
-  }, [branches])
+      
+      // If no branch lock found, check for POS auth session and restore branch
+      const posAuthStored = typeof window !== 'undefined' ? localStorage.getItem('pos.auth.session') : null
+      if (posAuthStored) {
+        const posSession = JSON.parse(posAuthStored)
+        if (posSession.branchId) {
+          const found = branches.find(b => b.id === posSession.branchId)
+          if (found) {
+            setSelectedBranch(found)
+            setIsLocked(true)
+            console.log('Branch selection restored from POS auth session:', found.name)
+            setIsRestoring(false)
+            return
+          }
+        }
+      }
+      
+      console.log('No branch restoration needed')
+      setIsRestoring(false)
+    } catch (error) {
+      console.error('Error restoring branch selection:', error)
+      setIsRestoring(false)
+    }
+  }, [branches, isClient])
 
   const lockBranchSelection = (branchId: string) => {
     const found = branches.find(b => b.id === branchId) || null
@@ -126,8 +227,20 @@ export const BranchProvider = ({ children }: BranchProviderProps) => {
     try {
       if (typeof window !== 'undefined') {
         localStorage.setItem('pos.branch.lock', JSON.stringify({ branchId }))
+        
+        // Also update POS auth session if it exists
+        const posAuthStored = localStorage.getItem('pos.auth.session')
+        if (posAuthStored) {
+          const posSession = JSON.parse(posAuthStored)
+          posSession.branchId = branchId
+          posSession.timestamp = Date.now() // Update timestamp
+          localStorage.setItem('pos.auth.session', JSON.stringify(posSession))
+          console.log('POS auth session updated with branch ID:', branchId)
+        }
       }
-    } catch {}
+    } catch (error) {
+      console.error('Error saving branch lock:', error)
+    }
   }
 
   const unlockBranchSelection = () => {
@@ -136,8 +249,14 @@ export const BranchProvider = ({ children }: BranchProviderProps) => {
     try {
       if (typeof window !== 'undefined') {
         localStorage.removeItem('pos.branch.lock')
+        
+        // Also clear POS auth session when unlocking
+        localStorage.removeItem('pos.auth.session')
+        console.log('Branch unlocked and POS auth session cleared')
       }
-    } catch {}
+    } catch (error) {
+      console.error('Error clearing branch lock:', error)
+    }
   }
 
   const value: BranchContextType = {
@@ -146,7 +265,7 @@ export const BranchProvider = ({ children }: BranchProviderProps) => {
     viewMode,
     setSelectedBranch,
     setViewMode,
-    isLoading,
+    isLoading: isLoading || isRestoring,
     isLocked,
     lockBranchSelection,
     unlockBranchSelection,

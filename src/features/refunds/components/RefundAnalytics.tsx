@@ -47,7 +47,7 @@ export const RefundAnalytics: React.FC<RefundAnalyticsProps> = ({ analytics }) =
           </div>
           
           <div className="space-y-4">
-            {analytics.monthlyTrends.map((trend, index) => (
+            {analytics.monthlyTrends?.map((trend, index) => (
               <div key={index} className="flex items-center justify-between">
                 <span className="text-sm font-medium text-gray-700 w-12">{trend.month}</span>
                 <div className="flex-1 mx-4">
@@ -81,7 +81,7 @@ export const RefundAnalytics: React.FC<RefundAnalyticsProps> = ({ analytics }) =
           </div>
           
           <div className="space-y-4">
-            {analytics.refundMethods.map((method, index) => (
+            {analytics.refundMethods?.map((method, index) => (
               <div key={index} className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
                   <div className={`w-3 h-3 rounded-full ${
@@ -113,7 +113,7 @@ export const RefundAnalytics: React.FC<RefundAnalyticsProps> = ({ analytics }) =
           </div>
           
           <div className="space-y-4">
-            {analytics.topRefundReasons.slice(0, 5).map((reason, index) => (
+            {analytics.topRefundReasons?.slice(0, 5).map((reason, index) => (
               <div key={index} className="flex items-center justify-between">
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-1">

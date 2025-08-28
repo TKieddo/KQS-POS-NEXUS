@@ -39,7 +39,8 @@ export const createLaybyeOrder = async (laybyeData: CreateLaybyeData): Promise<{
     const orderNumber = generateOrderNumber()
     
     // Create laybye order with all required fields (both remaining_balance and remaining_amount)
-    const remainingAmount = laybyeData.total_amount - laybyeData.deposit_amount
+    // Calculate correct remaining balance: Total - Deposit (no payments yet)
+    const remainingAmount = Math.max(0, laybyeData.total_amount - laybyeData.deposit_amount)
     
     const insertData: any = {
       order_number: orderNumber,
@@ -94,7 +95,9 @@ export const createLaybyeOrder = async (laybyeData: CreateLaybyeData): Promise<{
     }
 
     // Create initial deposit payment if deposit amount > 0
-    // Note: Temporarily disabled until laybye_payments table structure is confirmed
+    // FIXED: Don't create a separate payment record for the deposit
+    // The deposit amount is already tracked in laybye_orders.deposit_amount
+    // Only create payment records for additional payments beyond the deposit
     if (laybyeData.deposit_amount > 0) {
       console.log('Initial deposit payment would be created:', {
         laybye_id: laybyeOrder.id,
@@ -104,7 +107,8 @@ export const createLaybyeOrder = async (laybyeData: CreateLaybyeData): Promise<{
         notes: 'Initial deposit'
       })
       
-      // TODO: Re-enable when laybye_payments table is properly structured
+      // FIXED: Commented out to prevent double-counting the deposit
+      // The deposit is already tracked in laybye_orders.deposit_amount field
       /*
       const { error: paymentError } = await supabase
         .from('laybye_payments')
@@ -123,40 +127,45 @@ export const createLaybyeOrder = async (laybyeData: CreateLaybyeData): Promise<{
       */
     }
 
-    // Update product stock quantities (reserve items for laybye)
-    for (const item of laybyeData.items) {
-      const newStockQuantity = item.product.stock_quantity - item.quantity
-      
-      const { error: stockError } = await supabase
-        .from('products')
-        .update({ stock_quantity: newStockQuantity })
-        .eq('id', item.product.id)
+    // NEW LOGIC: Deduct quantities from branch stock when creating laybye order
+    // This reserves the items for the laybye order
+    if (laybyeData.branch_id) {
+      for (const item of laybyeData.items) {
+        try {
+          // Deduct from main product stock in branch_stock table
+          const { data: currentStock, error: fetchError } = await supabase
+            .from('branch_stock')
+            .select('stock_quantity')
+            .eq('product_id', item.product.id)
+            .eq('branch_id', laybyeData.branch_id)
+            .is('variant_id', null)
+            .single()
 
-      if (stockError) {
-        console.error('Error updating stock for product:', item.product.id, stockError)
+          if (!fetchError && currentStock) {
+            const currentQuantity = currentStock.stock_quantity || 0
+            const newQuantity = Math.max(0, currentQuantity - item.quantity)
+
+            const { error: stockError } = await supabase
+              .from('branch_stock')
+              .update({ 
+                stock_quantity: newQuantity,
+                updated_at: new Date().toISOString()
+              })
+              .eq('product_id', item.product.id)
+              .eq('branch_id', laybyeData.branch_id)
+              .is('variant_id', null)
+
+            if (stockError) {
+              console.error('Error deducting stock for product:', item.product.id, stockError)
+            }
+          }
+        } catch (error) {
+          console.error('Error processing stock deduction for item:', item.product.id, error)
+        }
       }
     }
 
-    // Create stock movement records
-    const stockMovements = laybyeData.items.map(item => ({
-      product_id: item.product.id,
-      movement_type: 'out', // 'out' for laybye (reserved)
-      quantity: -item.quantity, // Negative for laybye (reserved)
-      previous_stock: item.product.stock_quantity,
-      new_stock: item.product.stock_quantity - item.quantity,
-      reference_type: 'laybye',
-      reference_id: laybyeOrder.id,
-      notes: `Laybye order - ${item.quantity} units reserved via order ${orderNumber}`
-    }))
-
-    const { error: movementError } = await supabase
-      .from('stock_movements')
-      .insert(stockMovements)
-
-    if (movementError) {
-      console.error('Error creating stock movements:', movementError)
-      // This is not critical, so we don't rollback the laybye order
-    }
+    console.log('Laybye order created - quantities deducted from branch stock during creation')
 
     return { success: true, data: laybyeOrder }
   } catch (error) {
@@ -173,9 +182,10 @@ export const getLaybyeOrders = async (filters?: {
   startDate?: string
   endDate?: string
   limit?: number
+  search?: string // Add search parameter
 }): Promise<{ success: boolean; data?: any[]; error?: string }> => {
   try {
-    // First, get the laybye orders
+    // Get the laybye orders with customer name already populated in the table
     let query = supabase
       .from('laybye_orders')
       .select('*')
@@ -196,6 +206,13 @@ export const getLaybyeOrders = async (filters?: {
     if (filters?.endDate) {
       query = query.lte('created_at', filters.endDate)
     }
+    
+    // Add search functionality for customer name, order number, and customer phone
+    if (filters?.search && filters.search.trim()) {
+      const searchTerm = filters.search.trim()
+      query = query.or(`customer_name.ilike.%${searchTerm}%,order_number.ilike.%${searchTerm}%,customer_phone.ilike.%${searchTerm}%`)
+    }
+    
     if (filters?.limit) {
       query = query.limit(filters.limit)
     }
@@ -211,26 +228,10 @@ export const getLaybyeOrders = async (filters?: {
       return { success: true, data: [] }
     }
 
-    // Get customer IDs
-    const customerIds = [...new Set(laybyeOrders.map(order => order.customer_id).filter(Boolean))]
-    
-    // Get laybye order IDs
+    console.log(`🔍 Fetched ${laybyeOrders.length} laybye orders with customer names`)
+
+    // Get laybye order IDs for fetching related data
     const laybyeOrderIds = laybyeOrders.map(order => order.id)
-
-    // Fetch customers separately
-    let customers: any[] = []
-    if (customerIds.length > 0) {
-      const { data: customersData, error: customersError } = await supabase
-        .from('customers')
-        .select('id, first_name, last_name, email, phone')
-        .in('id', customerIds)
-
-      if (customersError) {
-        console.error('Error fetching customers for laybye orders:', customersError)
-      } else {
-        customers = customersData || []
-      }
-    }
 
     // Fetch laybye items separately
     let laybyeItems: any[] = []
@@ -282,9 +283,16 @@ export const getLaybyeOrders = async (filters?: {
     }
 
     // Combine the data
-    const enrichedLaybyeOrders = laybyeOrders.map(order => {
-      // Find customer
-      const customer = customers.find(c => c.id === order.customer_id)
+    const enrichedLaybyeOrders = laybyeOrders.map((order) => {
+      // Customer name is already available in the order data
+      const customerName = order.customer_name || 'Unknown Customer'
+      
+      // Debug: Log customer name from database
+      console.log(`🔍 Debug: Order ${order.order_number}`)
+      console.log(`  Customer ID: ${order.customer_id}`)
+      console.log(`  Customer Name from DB: ${customerName}`)
+      console.log(`  Customer Phone: ${order.customer_phone}`)
+      console.log(`  Customer Email: ${order.customer_email}`)
       
       // Find items for this order
       const orderItems = laybyeItems.filter(item => item.laybye_id === order.id)
@@ -298,17 +306,25 @@ export const getLaybyeOrders = async (filters?: {
       // Find payments for this order
       const orderPayments = laybyePayments.filter(payment => payment.laybye_id === order.id)
       
-      // Calculate remaining amount if not in database
+      // Calculate correct remaining amount: Total - (Deposit + All Payments)
       const totalPayments = orderPayments.reduce((sum, payment) => sum + (payment.amount || 0), 0)
-      const calculatedRemaining = (order.total_amount || 0) - totalPayments
+      const calculatedRemaining = Math.max(0, (order.total_amount || 0) - (order.deposit_amount || 0) - totalPayments)
       
       return {
         ...order,
-        customers: customer,
+        customer_display_name: customerName, // Use the name from database
+        customers: {
+          id: order.customer_id,
+          first_name: '', // We don't need these anymore since we have the display name
+          last_name: '',
+          email: order.customer_email,
+          phone: order.customer_phone
+        },
         laybye_items: enrichedItems,
         laybye_payments: orderPayments,
-        // Ensure remaining_amount is available (use from DB or calculate)
-        remaining_amount: order.remaining_amount !== undefined ? order.remaining_amount : calculatedRemaining
+        // Use calculated remaining amount for consistency
+        remaining_amount: calculatedRemaining,
+        remaining_balance: calculatedRemaining
       }
     })
 
@@ -437,10 +453,10 @@ export const addLaybyePayment = async (paymentData: LaybyePaymentData): Promise<
       return { success: false, error: paymentError.message }
     }
 
-    // Update laybye order remaining balance and status
+    // Get laybye order details
     const { data: laybyeOrder, error: fetchError } = await supabase
       .from('laybye_orders')
-      .select('total_amount, deposit_amount, remaining_balance, remaining_amount')
+      .select('total_amount, deposit_amount, remaining_balance, remaining_amount, branch_id')
       .eq('id', paymentData.laybye_id)
       .single()
 
@@ -449,29 +465,24 @@ export const addLaybyePayment = async (paymentData: LaybyePaymentData): Promise<
       return { success: false, error: fetchError.message }
     }
 
-    // Calculate current remaining balance
-    let currentRemaining: number
-    if (laybyeOrder.remaining_balance !== undefined) {
-      currentRemaining = laybyeOrder.remaining_balance
-    } else {
-      // Calculate from total payments if remaining_balance column doesn't exist
-      const { data: allPayments } = await supabase
-        .from('laybye_payments')
-        .select('amount')
-        .eq('laybye_id', paymentData.laybye_id)
-        
-      const totalPayments = (allPayments || []).reduce((sum, p) => sum + (p.amount || 0), 0)
-      currentRemaining = (laybyeOrder.total_amount || 0) - totalPayments
-    }
+    // Get all payments for this laybye order
+    const { data: allPayments } = await supabase
+      .from('laybye_payments')
+      .select('amount')
+      .eq('laybye_id', paymentData.laybye_id)
+      
+    const totalPayments = (allPayments || []).reduce((sum, p) => sum + (p.amount || 0), 0)
+    
+    // Calculate correct remaining balance: Total - (Deposit + All Payments)
+    const calculatedBalance = Math.max(0, (laybyeOrder.total_amount || 0) - (laybyeOrder.deposit_amount || 0) - totalPayments)
+    const newStatus = calculatedBalance <= 0 ? 'completed' : 'active'
 
-    const newRemainingBalance = currentRemaining - paymentData.amount
-    const newStatus = newRemainingBalance <= 0 ? 'completed' : 'active'
-
-    // Update the order (update both remaining_balance and remaining_amount)
+    // Update the order with correct balance
     const updateData: any = { 
       status: newStatus,
-      remaining_balance: newRemainingBalance,
-      remaining_amount: newRemainingBalance
+      remaining_balance: calculatedBalance,
+      remaining_amount: calculatedBalance,
+      updated_at: new Date().toISOString()
     }
 
     const { error: updateError } = await supabase
@@ -484,35 +495,10 @@ export const addLaybyePayment = async (paymentData: LaybyePaymentData): Promise<
       return { success: false, error: updateError.message }
     }
 
-    // If laybye is completed, release stock back to inventory
+    // Note: No quantity deduction on completion since quantities were already deducted when laybye was created
+    // The laybye completion only changes the status from 'active' to 'completed'
     if (newStatus === 'completed') {
-      const { data: laybyeItems, error: itemsError } = await supabase
-        .from('laybye_items')
-        .select('product_id, quantity')
-        .eq('laybye_id', paymentData.laybye_id)
-
-      if (!itemsError && laybyeItems) {
-        for (const item of laybyeItems) {
-          const { data: product } = await supabase
-            .from('products')
-            .select('stock_quantity')
-            .eq('id', item.product_id)
-            .single()
-
-          if (product) {
-            const newStockQuantity = product.stock_quantity + item.quantity
-            
-            const { error: stockError } = await supabase
-              .from('products')
-              .update({ stock_quantity: newStockQuantity })
-              .eq('id', item.product_id)
-
-            if (stockError) {
-              console.error('Error releasing stock for product:', item.product_id, stockError)
-            }
-          }
-        }
-      }
+      console.log('Laybye order completed - quantities already deducted during creation')
     }
 
     return { success: true, data: payment }

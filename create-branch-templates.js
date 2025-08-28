@@ -55,6 +55,12 @@ const defaultTemplates = [
     is_default: false
   },
   {
+    name: 'KQS Final Laybye Payment Receipt',
+    description: 'Final laybye payment receipt showing completion and collection ready status',
+    template_type: 'detailed',
+    is_default: false
+  },
+  {
     name: 'KQS Quotation Slip',
     description: 'Quotation slip template for price estimates and proposals',
     template_type: 'compact',

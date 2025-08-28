@@ -24,7 +24,7 @@ interface BranchPOSPageProps {
 
 export default function BranchPOSPage({ params }: BranchPOSPageProps) {
   const router = useRouter()
-  const { user, appUser } = useAuth()
+  const { user, appUser, isPOSAuthenticated, getPOSBranchId } = useAuth()
   const { selectedBranch, setSelectedBranch, lockBranchSelection } = useBranch()
   const [branch, setBranch] = useState<Branch | null>(null)
   const [loading, setLoading] = useState(true)
@@ -63,7 +63,7 @@ export default function BranchPOSPage({ params }: BranchPOSPageProps) {
         
         // Set the branch in context and lock it
         setSelectedBranch(data)
-        lockBranchSelection()
+        lockBranchSelection(data.id)
 
       } catch (error) {
         console.error('Error fetching branch:', error)
@@ -76,12 +76,33 @@ export default function BranchPOSPage({ params }: BranchPOSPageProps) {
     fetchBranch()
   }, [decodedBranchName, setSelectedBranch, lockBranchSelection])
 
-  // Redirect to sign-in if not authenticated
+  // Check if user is authenticated for this specific branch
   useEffect(() => {
-    if (!loading && branch && !appUser) {
-      router.push(`/pos/${encodeURIComponent(branch.name)}/sign-in`)
+    if (!loading && branch) {
+      const posBranchId = getPOSBranchId()
+      
+      // If POS is authenticated for this branch, redirect to main POS
+      if (isPOSAuthenticated && posBranchId === branch.id) {
+        console.log('POS authenticated for this branch, redirecting to main POS...')
+        router.push('/pos')
+        return
+      }
+      
+      // If POS is authenticated for a different branch, show error
+      if (isPOSAuthenticated && posBranchId && posBranchId !== branch.id) {
+        console.log('POS authenticated for different branch, showing error...')
+        setError(`You are currently signed into a different branch. Please sign out first.`)
+        return
+      }
+      
+      // If not authenticated, redirect to sign-in
+      if (!appUser && !isPOSAuthenticated) {
+        console.log('Not authenticated, redirecting to sign-in...')
+        router.push(`/pos/${encodeURIComponent(branch.name)}/sign-in`)
+        return
+      }
     }
-  }, [loading, branch, appUser, router])
+  }, [loading, branch, appUser, isPOSAuthenticated, getPOSBranchId, router])
 
   // If authenticated and branch is set, redirect to main POS
   useEffect(() => {

@@ -125,7 +125,7 @@ const ReturnsExchangeSlipReceiptPreview: React.FC<ReturnsExchangeSlipReceiptPrev
 
         {/* Return & Exchange Policy */}
         <div className="mb-3">
-          <div className="text-center font-bold text-gray-900 mb-1">Return &amp; Exchange Policy</div>
+          <div className="text-center font-bold text-gray-900 mb-1">Return & Exchange Policy</div>
           <div className="text-gray-700 text-xs leading-tight bg-gray-50 p-2 rounded-sm">
             Returns and exchanges accepted within <span className="font-semibold">7 days</span> of purchase with a valid receipt.<br />
             Exchanges are for goods of equal value only.<br />
