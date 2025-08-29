@@ -10,7 +10,7 @@ const LaybyeFinalPaymentPreviewPage = () => {
     <div className="container mx-auto px-4 py-8">
       <div className="mb-6">
         <Link 
-          href="/settings/branch-receipts" 
+          href="/admin/settings/branch-receipts" 
           className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />

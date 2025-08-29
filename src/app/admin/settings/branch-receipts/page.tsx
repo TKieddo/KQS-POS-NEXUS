@@ -445,7 +445,7 @@ const BranchReceiptsPage = () => {
             <p className="text-gray-600 mb-4">
               No branches are available. Please create branches first.
             </p>
-            <Link href="/settings">
+            <Link href="/admin/settings">
               <Button variant="outline">
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Back to Settings
@@ -463,7 +463,7 @@ const BranchReceiptsPage = () => {
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-3 mb-2">
-            <Link href="/settings">
+            <Link href="/admin/settings">
               <Button variant="ghost" size="sm" className="text-muted-foreground">
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Back to Settings
