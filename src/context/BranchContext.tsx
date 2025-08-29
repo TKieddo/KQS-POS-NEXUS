@@ -90,7 +90,7 @@ export const BranchProvider = ({ children }: BranchProviderProps) => {
               if ((now - posSession.timestamp) <= POS_AUTH_TTL && posSession.branchId) {
                 const posBranch = allBranches.find((b: any) => b.id === posSession.branchId)
                 if (posBranch) {
-                  console.log('Setting branch from POS session:', posBranch.name)
+                  // Debug logging removed for production
                   setSelectedBranch(posBranch)
                   setIsLocked(true)
                   return
@@ -103,7 +103,7 @@ export const BranchProvider = ({ children }: BranchProviderProps) => {
         }
         
         // If no valid POS session, set Central Warehouse as default
-        console.log('Setting default Central Warehouse branch')
+        // Debug logging removed for production
         setSelectedBranch(centralWarehouse || allBranches[0] || null)
       }
       setError(null)
@@ -145,7 +145,7 @@ export const BranchProvider = ({ children }: BranchProviderProps) => {
                 if ((now - posSession.timestamp) <= POS_AUTH_TTL && posSession.branchId) {
                   const posBranch = cachedItems.find((b: any) => b.id === posSession.branchId)
                   if (posBranch) {
-                    console.log('Setting branch from POS session (cache):', posBranch.name)
+                    // Debug logging removed for production
                     setSelectedBranch(posBranch)
                     setIsLocked(true)
                     return
@@ -159,7 +159,7 @@ export const BranchProvider = ({ children }: BranchProviderProps) => {
           
           // If no valid POS session, set Central Warehouse as default
           const central = cachedItems.find((b: any) => b.id === CENTRAL_WAREHOUSE_ID) || null
-          console.log('Setting default Central Warehouse branch (cache)')
+          // Debug logging removed for production
           setSelectedBranch(central || cachedItems[0] || null)
         }
         setIsLoading(false)
@@ -180,7 +180,7 @@ export const BranchProvider = ({ children }: BranchProviderProps) => {
       if (!isPOSRoute) return
       
       setIsRestoring(true)
-      console.log('Starting branch restoration process...')
+      // Debug logging removed for production
       
       // First check for branch lock
       const stored = typeof window !== 'undefined' ? localStorage.getItem('pos.branch.lock') : null
@@ -190,7 +190,7 @@ export const BranchProvider = ({ children }: BranchProviderProps) => {
         if (found) {
           setSelectedBranch(found)
           setIsLocked(true)
-          console.log('Branch selection restored from localStorage:', found.name)
+          // Debug logging removed for production
           setIsRestoring(false)
           return
         }
@@ -205,14 +205,14 @@ export const BranchProvider = ({ children }: BranchProviderProps) => {
           if (found) {
             setSelectedBranch(found)
             setIsLocked(true)
-            console.log('Branch selection restored from POS auth session:', found.name)
+            // Debug logging removed for production
             setIsRestoring(false)
             return
           }
         }
       }
       
-      console.log('No branch restoration needed')
+      // Debug logging removed for production
       setIsRestoring(false)
     } catch (error) {
       console.error('Error restoring branch selection:', error)

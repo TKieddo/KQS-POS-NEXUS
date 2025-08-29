@@ -53,7 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       
       localStorage.setItem(POS_AUTH_KEY, JSON.stringify(session))
-      console.log('POS auth session saved to localStorage')
+      // Debug logging removed for production
     } catch (error) {
       console.error('Error saving POS auth session:', error)
     }
@@ -71,12 +71,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Check if session is still valid (within TTL)
       const now = Date.now()
       if (now - session.timestamp > POS_AUTH_TTL) {
-        console.log('POS auth session expired, clearing...')
+        // Debug logging removed for production
         localStorage.removeItem(POS_AUTH_KEY)
         return null
       }
       
-      console.log('POS auth session loaded from localStorage')
+      // Debug logging removed for production
       return session
     } catch (error) {
       console.error('Error loading POS auth session:', error)
