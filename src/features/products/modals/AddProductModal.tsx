@@ -16,6 +16,7 @@ import { uploadProductImage, createProductImage, supabase } from '@/lib/supabase
 import { AIDescriptionGenerator } from '../components/AIDescriptionGenerator'
 import { AITitleGenerator } from '../components/AITitleGenerator'
 import type { ProductInfo } from '@/lib/ai-services'
+import { toast } from 'sonner'
 import { 
   getVariantOptionsForCategory, 
   getSizeOptionsForCategory, 
@@ -169,7 +170,7 @@ export const AddProductModal = ({ isOpen, onClose, onProductAdded }: AddProductM
 
   const handleSave = async () => {
     if (!productData.name || !productData.price) {
-      alert('Please fill in all required fields')
+      toast.error('Please fill in all required fields (Product Name and Price)')
       return
     }
 
@@ -178,10 +179,18 @@ export const AddProductModal = ({ isOpen, onClose, onProductAdded }: AddProductM
     try {
       // 1. Upload images to Supabase
       const urlMap: Record<string, string> = {}
-      for (const img of images) {
+      if (images.length > 0) {
+        toast.loading('Uploading images...')
+        for (const img of images) {
           const supaUrl = await uploadProductImage(img.file)
-          if (!supaUrl) throw new Error('Image upload failed')
+          if (!supaUrl) {
+            toast.dismiss()
+            toast.error('Failed to upload image. Please try again.')
+            return
+          }
           urlMap[img.url] = supaUrl
+        }
+        toast.dismiss()
       }
 
       // 2. Prepare product data with Supabase URLs
@@ -214,117 +223,130 @@ export const AddProductModal = ({ isOpen, onClose, onProductAdded }: AddProductM
       }
 
       // 3. Save the product
+      toast.loading('Saving product...')
       const result = await addProduct(productToSave)
       
-      if (result) {
-        // 4. Save product images
-        if (galleryUrls.length > 0) {
-          for (let i = 0; i < galleryUrls.length; i++) {
-            const imageUrl = galleryUrls[i]
-            const isMain = imageUrl === mainImageUrl
-            
-            await createProductImage({
-              product_id: result.id,
-              variant_id: null,
-              image_url: imageUrl,
-              image_name: `Product Image ${i + 1}`,
-              image_size: null,
-              is_main_image: isMain,
-              sort_order: i
-            })
-          }
+      if (!result) {
+        toast.dismiss()
+        toast.error('Failed to save product. Please check your data and try again.')
+        return
+      }
+
+      // 4. Save product images
+      if (galleryUrls.length > 0) {
+        toast.loading('Saving product images...')
+        for (let i = 0; i < galleryUrls.length; i++) {
+          const imageUrl = galleryUrls[i]
+          const isMain = imageUrl === mainImageUrl
+          
+          await createProductImage({
+            product_id: result.id,
+            variant_id: null,
+            image_url: imageUrl,
+            image_name: `Product Image ${i + 1}`,
+            image_size: null,
+            is_main_image: isMain,
+            sort_order: i
+          })
         }
-        
-        // 5. Save variants if any
-        if (variants.length > 0) {
-          for (const variant of variants) {
-            // Save variant to product_variants table
-            const { error: variantError } = await supabase
-              .from('product_variants')
-              .insert({
-                product_id: result.id,
-                sku: variant.sku,
-                barcode: variant.barcode,
-                price: variant.price,
-                cost_price: variant.cost,
-                stock_quantity: variant.stock_quantity,
-                image_url: variant.image_url,
-                is_active: variant.is_active,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-              })
+      }
+      
+      // 5. Save variants if any
+      if (variants.length > 0) {
+        toast.loading('Saving product variants...')
+        for (const variant of variants) {
+          // Save variant to product_variants table
+          const { error: variantError } = await supabase
+            .from('product_variants')
+            .insert({
+              product_id: result.id,
+              sku: variant.sku,
+              barcode: variant.barcode,
+              price: variant.price,
+              cost_price: variant.cost,
+              stock_quantity: variant.stock_quantity,
+              image_url: variant.image_url,
+              is_active: variant.is_active,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
 
-            if (variantError) {
-              console.error('Error saving variant:', variantError)
-              throw new Error(`Failed to save variant ${variant.sku}`)
-            }
+          if (variantError) {
+            console.error('Error saving variant:', variantError)
+            toast.dismiss()
+            toast.error(`Failed to save variant ${variant.sku}: ${variantError.message}`)
+            return
+          }
 
-            // Save variant options to product_variant_options table
-            const variantId = await supabase
-              .from('product_variants')
-              .select('id')
-              .eq('product_id', result.id)
-              .eq('sku', variant.sku)
-              .single()
+          // Save variant options to product_variant_options table
+          const variantId = await supabase
+            .from('product_variants')
+            .select('id')
+            .eq('product_id', result.id)
+            .eq('sku', variant.sku)
+            .single()
 
-            if (variantId.data) {
-              // Save each option (size, color, gender, brand)
-              for (const [optionType, optionValue] of Object.entries(variant.options)) {
-                if (optionValue) {
-                  // Get the variant option ID
-                  const { data: optionData } = await supabase
-                    .from('variant_options')
-                    .select('id')
-                    .eq('value', optionValue)
-                    .single()
+          if (variantId.data) {
+            // Save each option (size, color, gender, brand)
+            for (const [optionType, optionValue] of Object.entries(variant.options)) {
+              if (optionValue) {
+                // Get the variant option ID
+                const { data: optionData } = await supabase
+                  .from('variant_options')
+                  .select('id')
+                  .eq('value', optionValue)
+                  .single()
 
-                  if (optionData) {
-                    await supabase
-                      .from('product_variant_options')
-                      .insert({
-                        product_variant_id: variantId.data.id,
-                        option_id: optionData.id,
-                        created_at: new Date().toISOString()
-                      })
-                  }
+                if (optionData) {
+                  await supabase
+                    .from('product_variant_options')
+                    .insert({
+                      product_variant_id: variantId.data.id,
+                      option_id: optionData.id,
+                      created_at: new Date().toISOString()
+                    })
                 }
               }
             }
           }
         }
-        
-        onClose()
-        onProductAdded?.()
-        
-        // Reset form
-        setProductData({
-          name: '',
-          description: '',
-          category_id: '',
-          cost_price: '',
-          price: '',
-          stock_quantity: '0',
-          min_stock_level: '0',
-          max_stock_level: '',
-          unit: 'piece',
-          sku: '',
-          barcode: '',
-          hasVariants: false,
-          variants: [],
-          colorImages: {},
-          discount_amount: '',
-          discount_type: 'percentage',
-          discount_description: '',
-          discount_expires_at: '',
-          is_discount_active: false,
-        })
-        setImages([])
-        setMainImage(null)
-        setVariants([])
       }
+      
+      toast.dismiss()
+      toast.success(`Product "${productData.name}" saved successfully!`)
+      
+      onClose()
+      onProductAdded?.()
+      
+      // Reset form
+      setProductData({
+        name: '',
+        description: '',
+        category_id: '',
+        cost_price: '',
+        price: '',
+        stock_quantity: '0',
+        min_stock_level: '0',
+        max_stock_level: '',
+        unit: 'piece',
+        sku: '',
+        barcode: '',
+        hasVariants: false,
+        variants: [],
+        colorImages: {},
+        discount_amount: '',
+        discount_type: 'percentage',
+        discount_description: '',
+        discount_expires_at: '',
+        is_discount_active: false,
+      })
+      setImages([])
+      setMainImage(null)
+      setVariants([])
     } catch (error) {
       console.error('Error adding product:', error)
-      alert('Failed to add product. Please try again.')
+      toast.dismiss()
+      toast.error(`Failed to add product: ${error instanceof Error ? error.message : 'Unknown error occurred'}`)
     } finally {
       setIsSubmitting(false)
     }
