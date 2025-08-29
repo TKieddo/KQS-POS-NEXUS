@@ -302,9 +302,7 @@ const ProductRow: React.FC<{
   }
 
   const handleToggleExpanded = () => {
-    console.log('Toggle expanded clicked for product:', product.name, 'has_variants:', product.has_variants)
     if (!isExpanded && product.has_variants) {
-      console.log('Fetching variants for product:', product.id)
       fetchVariants()
     }
     setIsExpanded(!isExpanded)

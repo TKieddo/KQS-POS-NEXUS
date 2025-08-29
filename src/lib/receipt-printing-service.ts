@@ -553,6 +553,7 @@ export const getReceiptTemplateForTransaction = async (
     const templateConfig: Record<string, { name: string; category: string; type: 'standard' | 'compact' | 'detailed' | 'custom' }> = {
       'sale': { name: 'KQS Retail Receipt', category: 'sales', type: 'standard' },
       'laybye_payment': { name: 'KQS Laybye Payment Receipt', category: 'sales', type: 'detailed' },
+      'laybye_final': { name: 'KQS Final Laybye Payment Receipt', category: 'sales', type: 'detailed' },
       'laybye_final_payment': { name: 'KQS Final Laybye Payment Receipt', category: 'sales', type: 'detailed' },
       'laybye_reserve': { name: 'KQS Laybye Reserve Slip', category: 'sales', type: 'compact' },
       'refund': { name: 'KQS Refund Slip', category: 'sales', type: 'compact' },
@@ -622,7 +623,7 @@ export const getReceiptTemplateForTransaction = async (
         let defaultTemplateName = 'KQS Retail Receipt' // Default for sales
         
         // Set appropriate default based on transaction type
-        if (transactionType === 'laybye_payment' || transactionType === 'laybye_reserve') {
+        if (transactionType === 'laybye_payment' || transactionType === 'laybye_reserve' || transactionType === 'laybye_final') {
           defaultTemplateName = 'KQS Laybye Payment Receipt'
         } else if (transactionType === 'account_payment' || transactionType === 'customer_statement') {
           defaultTemplateName = 'KQS Account Payment Receipt'
@@ -774,6 +775,8 @@ export const printTransactionReceipt = async (data: PrintReceiptData): Promise<{
       
       if (data.transactionType === 'laybye_payment') {
         receiptHtml = await createBeautifulLaybyePaymentReceiptHtml(data.transactionData, data.branchId)
+      } else if (data.transactionType === 'laybye_final') {
+        receiptHtml = await createBeautifulLaybyeFinalReceiptHtml(data.transactionData, data.branchId)
       } else if (data.transactionType === 'laybye_reserve') {
         receiptHtml = await createBeautifulLaybyeReserveReceiptHtml(data.transactionData, data.branchId)
       } else {
@@ -2225,9 +2228,9 @@ export const createBeautifulLaybyeFinalReceiptHtml = async (transactionData: Tra
         <!-- Header -->
         <div class="header">
           <img src="/images/receipts/KQS RECEIPT LOGO-Photoroom.png" alt="KQS Logo" class="logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-          <div class="business-name" style="display: none;">
-          <div class="receipt-type final">LAYBYE FINAL RECEIPT</div>
-            </div>
+          <div class="business-name" style="display: none;">${template.business_name}</div>
+          <div class="receipt-type">LAYBYE FINAL RECEIPT</div>
+        </div>
 
         <!-- Info Section -->
         <div class="info-section">

@@ -1,12 +1,9 @@
 import React from 'react'
-import { Inter } from 'next/font/google'
 import '../globals.css'
 import { AdminHeader } from '@/components/layout/AdminHeader'
 import { Sidebar } from '@/components/layout/sidebar'
 import { BranchProvider } from '@/context/BranchContext'
 import { AuthProvider } from '@/context/AuthContext'
-
-const inter = Inter({ subsets: ['latin'] })
 
 export const metadata = {
   title: 'KQS Admin - Business Management',

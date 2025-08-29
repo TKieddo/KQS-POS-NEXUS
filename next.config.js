@@ -9,7 +9,7 @@ const nextConfig = {
   trailingSlash: false,
   poweredByHeader: false,
   experimental: {
-    serverComponentsExternalPackages: [],
+    // Remove deprecated serverComponentsExternalPackages
   },
 }
 
