@@ -61,10 +61,10 @@ CREATE TABLE IF NOT EXISTS variant_options (
 
 CREATE TABLE IF NOT EXISTS product_variant_options (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    product_variant_id UUID REFERENCES product_variants(id) ON DELETE CASCADE,
+    variant_id UUID REFERENCES product_variants(id) ON DELETE CASCADE,
     option_id UUID REFERENCES variant_options(id) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE(product_variant_id, option_id)
+    UNIQUE(variant_id, option_id)
 );
 
 CREATE TABLE IF NOT EXISTS product_images (
@@ -143,32 +143,56 @@ ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE variant_options ENABLE ROW LEVEL SECURITY;
 ALTER TABLE product_variant_options ENABLE ROW LEVEL SECURITY;
 
--- 8. INSERT BASIC VARIANT OPTIONS
-INSERT INTO variant_options (type, value, display_name) VALUES
-('size', 'XS', 'Extra Small'),
-('size', 'S', 'Small'),
-('size', 'M', 'Medium'),
-('size', 'L', 'Large'),
-('size', 'XL', 'Extra Large'),
-('size', 'XXL', '2XL'),
-('color', 'Red', 'Red'),
-('color', 'Blue', 'Blue'),
-('color', 'Green', 'Green'),
-('color', 'Black', 'Black'),
-('color', 'White', 'White'),
-('color', 'Yellow', 'Yellow'),
-('gender', 'Men', 'Men'),
-('gender', 'Women', 'Women'),
-('gender', 'Unisex', 'Unisex'),
-('brand', 'Generic', 'Generic')
-ON CONFLICT (type, value) DO NOTHING;
+-- 8. CHECK AND ADD MISSING COLUMNS TO VARIANT_OPTIONS IF NEEDED
+DO $$
+BEGIN
+    -- Add type column if it doesn't exist
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'variant_options' AND column_name = 'type') THEN
+        ALTER TABLE variant_options ADD COLUMN type VARCHAR(50);
+    END IF;
+    
+    -- Add display_name column if it doesn't exist
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'variant_options' AND column_name = 'display_name') THEN
+        ALTER TABLE variant_options ADD COLUMN display_name VARCHAR(100);
+    END IF;
+END $$;
 
--- 9. INSERT A DEFAULT CATEGORY
+-- 9. INSERT BASIC VARIANT OPTION TYPES (for the variant_option_types table)
+INSERT INTO variant_option_types (name, display_name, description) VALUES
+('size', 'Size', 'Product size options'),
+('color', 'Color', 'Product color options'),
+('gender', 'Gender', 'Product gender options'),
+('brand', 'Brand', 'Product brand options')
+ON CONFLICT (name) DO NOTHING;
+
+-- 10. INSERT BASIC VARIANT OPTIONS (only if table is empty)
+INSERT INTO variant_options (type, value, display_name) 
+SELECT * FROM (VALUES
+    ('size', 'XS', 'Extra Small'),
+    ('size', 'S', 'Small'),
+    ('size', 'M', 'Medium'),
+    ('size', 'L', 'Large'),
+    ('size', 'XL', 'Extra Large'),
+    ('size', 'XXL', '2XL'),
+    ('color', 'Red', 'Red'),
+    ('color', 'Blue', 'Blue'),
+    ('color', 'Green', 'Green'),
+    ('color', 'Black', 'Black'),
+    ('color', 'White', 'White'),
+    ('color', 'Yellow', 'Yellow'),
+    ('gender', 'Men', 'Men'),
+    ('gender', 'Women', 'Women'),
+    ('gender', 'Unisex', 'Unisex'),
+    ('brand', 'Generic', 'Generic')
+) AS v(type, value, display_name)
+WHERE NOT EXISTS (SELECT 1 FROM variant_options LIMIT 1);
+
+-- 11. INSERT A DEFAULT CATEGORY
 INSERT INTO categories (name, description, color) VALUES
 ('General', 'General products', '#3B82F6')
 ON CONFLICT DO NOTHING;
 
--- 10. CREATE INDEXES FOR BETTER PERFORMANCE
+-- 12. CREATE INDEXES FOR BETTER PERFORMANCE
 CREATE INDEX IF NOT EXISTS idx_products_category_id ON products(category_id);
 CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
 CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode);
@@ -192,15 +216,15 @@ CREATE INDEX IF NOT EXISTS idx_variant_options_type ON variant_options(type);
 CREATE INDEX IF NOT EXISTS idx_variant_options_value ON variant_options(value);
 CREATE INDEX IF NOT EXISTS idx_variant_options_is_active ON variant_options(is_active);
 
-CREATE INDEX IF NOT EXISTS idx_product_variant_options_variant_id ON product_variant_options(product_variant_id);
+CREATE INDEX IF NOT EXISTS idx_product_variant_options_variant_id ON product_variant_options(variant_id);
 CREATE INDEX IF NOT EXISTS idx_product_variant_options_option_id ON product_variant_options(option_id);
 
--- 11. GRANT ALL PERMISSIONS TO AUTHENTICATED USERS
+-- 13. GRANT ALL PERMISSIONS TO AUTHENTICATED USERS
 GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO authenticated;
 
--- 12. CREATE HELPER FUNCTIONS
+-- 14. CREATE HELPER FUNCTIONS
 CREATE OR REPLACE FUNCTION calculate_discounted_price(
   original_price DECIMAL(10,2),
   discount_amount DECIMAL(10,2),
@@ -236,7 +260,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 13. CREATE VIEWS FOR PRODUCTS WITH DISCOUNTS
+-- 15. CREATE VIEWS FOR PRODUCTS WITH DISCOUNTS
 CREATE OR REPLACE VIEW products_with_discounts AS
 SELECT 
   p.*,
@@ -267,12 +291,12 @@ SELECT
   END as discount_savings
 FROM product_variants pv;
 
--- 14. TEST INSERT TO VERIFY EVERYTHING WORKS
+-- 16. TEST INSERT TO VERIFY EVERYTHING WORKS
 INSERT INTO products (name, description, price, stock_quantity, unit, is_active) VALUES
 ('Test Product', 'This is a test product to verify database setup', 99.99, 10, 'piece', true)
 ON CONFLICT DO NOTHING;
 
--- 15. VERIFICATION QUERY
+-- 17. VERIFICATION QUERY
 SELECT 
   'Database setup completed successfully!' as status,
   (SELECT COUNT(*) FROM products) as products_count,

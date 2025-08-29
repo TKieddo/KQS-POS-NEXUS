@@ -404,7 +404,7 @@ export const EditProductModal = ({ isOpen, onClose, product, onProductUpdated }:
                       await supabase
                         .from('product_variant_options')
                         .insert({
-                          product_variant_id: newVariant.id,
+                          variant_id: newVariant.id,
                           option_id: optionData.id,
                           created_at: new Date().toISOString()
                         })

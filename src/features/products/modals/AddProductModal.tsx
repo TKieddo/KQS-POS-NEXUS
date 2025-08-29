@@ -381,7 +381,7 @@ export const AddProductModal = ({ isOpen, onClose, onProductAdded }: AddProductM
 
                 if (optionData) {
                   const optionInsertData = {
-                    product_variant_id: variantId.data.id,
+                    variant_id: variantId.data.id,
                     option_id: optionData.id,
                     created_at: new Date().toISOString()
                   }
