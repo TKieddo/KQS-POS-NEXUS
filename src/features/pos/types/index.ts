@@ -23,6 +23,8 @@ export interface CartItem {
   unitPrice: number
   totalPrice: number
   discount?: number
+  variantId?: string // Add variant ID for products with variants
+  variantOptions?: Record<string, string> // Add variant options for display
 }
 
 export interface Customer {

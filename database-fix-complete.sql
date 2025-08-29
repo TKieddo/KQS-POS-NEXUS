@@ -260,8 +260,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 15. CREATE VIEWS FOR PRODUCTS WITH DISCOUNTS
-CREATE OR REPLACE VIEW products_with_discounts AS
+-- 15. DROP EXISTING VIEWS IF THEY EXIST TO AVOID CONFLICTS
+DROP VIEW IF EXISTS products_with_discounts;
+DROP VIEW IF EXISTS product_variants_with_discounts;
+
+-- 16. CREATE VIEWS FOR PRODUCTS WITH DISCOUNTS
+CREATE VIEW products_with_discounts AS
 SELECT 
   p.*,
   CASE 
@@ -276,7 +280,7 @@ SELECT
   END as discount_savings
 FROM products p;
 
-CREATE OR REPLACE VIEW product_variants_with_discounts AS
+CREATE VIEW product_variants_with_discounts AS
 SELECT 
   pv.*,
   CASE 
@@ -291,12 +295,12 @@ SELECT
   END as discount_savings
 FROM product_variants pv;
 
--- 16. TEST INSERT TO VERIFY EVERYTHING WORKS
+-- 17. TEST INSERT TO VERIFY EVERYTHING WORKS
 INSERT INTO products (name, description, price, stock_quantity, unit, is_active) VALUES
 ('Test Product', 'This is a test product to verify database setup', 99.99, 10, 'piece', true)
 ON CONFLICT DO NOTHING;
 
--- 17. VERIFICATION QUERY
+-- 18. VERIFICATION QUERY
 SELECT 
   'Database setup completed successfully!' as status,
   (SELECT COUNT(*) FROM products) as products_count,

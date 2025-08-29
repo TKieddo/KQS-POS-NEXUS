@@ -11,6 +11,7 @@ import { usePOSPrinting } from '@/lib/pos-printing-integration'
 import { StartSessionModal } from './StartSessionModal'
 import { VarianceModal } from './VarianceModal'
 import { toast } from 'sonner'
+import { supabase } from '@/lib/supabase'
 
 interface CashUpSession {
   id: string
@@ -148,16 +149,122 @@ export const CashUpPage: React.FC<CashUpPageProps> = ({
     setNotes('')
     
     // Automatically print receipt when closing session
-    setTimeout(() => {
-      handlePrintReceipt()
+    setTimeout(async () => {
+      try {
+        await handlePrintReceipt()
+        toast.success('✅ Cash up receipt printed successfully!')
+      } catch (error) {
+        console.error('Error printing cash up receipt:', error)
+        toast.error('❌ Failed to print cash up receipt')
+      }
     }, 500) // Small delay to ensure session is closed first
   }
 
   const handlePrintReceipt = async () => {
-    if (!currentSession) return
+    if (!currentSession) {
+      toast.error('No active session to print receipt for')
+      return
+    }
     
     try {
       const printingService = createPrintingService()
+      
+      // Calculate cash drops and payouts from expenses
+      const cashDrops = expenses
+        .filter(expense => expense.type === 'cash' && expense.description.toLowerCase().includes('drop'))
+        .reduce((sum, expense) => sum + expense.amount, 0)
+      
+      const cashPayouts = expenses
+        .filter(expense => expense.type === 'cash' && expense.description.toLowerCase().includes('payout'))
+        .reduce((sum, expense) => sum + expense.amount, 0)
+      
+      // Fetch comprehensive session data
+      const { data: sessionData, error: sessionError } = await supabase
+        .from('sales')
+        .select(`
+          *,
+          sale_items (
+            *,
+            product:products (
+              category:categories (name)
+            )
+          )
+        `)
+        .eq('session_id', currentSession.id)
+        .gte('created_at', currentSession.startTime)
+        .lte('created_at', currentSession.endTime || new Date().toISOString())
+      
+      if (sessionError) {
+        console.error('Error fetching session data:', sessionError)
+      }
+      
+      // Calculate payment methods breakdown
+      const paymentMethods: Record<string, number> = {}
+      if (sessionData) {
+        sessionData.forEach((sale: any) => {
+          const method = sale.payment_method || 'Unknown'
+          paymentMethods[method] = (paymentMethods[method] || 0) + sale.total_amount
+        })
+      }
+      
+      // Calculate product categories breakdown
+      const productCategories: Record<string, number> = {}
+      if (sessionData) {
+        sessionData.forEach((sale: any) => {
+          sale.sale_items?.forEach((item: any) => {
+            const category = item.product?.category?.name || 'Uncategorized'
+            productCategories[category] = (productCategories[category] || 0) + (item.price * item.quantity)
+          })
+        })
+      }
+      
+      // Calculate transaction types breakdown
+      const transactionTypes: Record<string, number> = {
+        'Sales': currentSession.sales.cash + currentSession.sales.card,
+        'Laybye Payments': 0, // Will be calculated from laybye_payments table
+        'Refunds': 0, // Will be calculated from refunds table
+        'Account Payments': 0 // Will be calculated from account_payments table
+      }
+      
+      // Fetch laybye payments for this session
+      const { data: laybyePayments } = await supabase
+        .from('laybye_payments')
+        .select('payment_amount')
+        .eq('session_id', currentSession.id)
+      
+      if (laybyePayments) {
+        transactionTypes['Laybye Payments'] = laybyePayments.reduce((sum: number, payment: any) => sum + payment.payment_amount, 0)
+      }
+      
+      // Fetch refunds for this session
+      const { data: refunds } = await supabase
+        .from('refunds')
+        .select('refund_amount')
+        .eq('session_id', currentSession.id)
+      
+      if (refunds) {
+        transactionTypes['Refunds'] = refunds.reduce((sum: number, refund: any) => sum + refund.refund_amount, 0)
+      }
+      
+      // Fetch account payments for this session
+      const { data: accountPayments } = await supabase
+        .from('account_payments')
+        .select('payment_amount')
+        .eq('session_id', currentSession.id)
+      
+      if (accountPayments) {
+        transactionTypes['Account Payments'] = accountPayments.reduce((sum: number, payment: any) => sum + payment.payment_amount, 0)
+      }
+      
+      // Calculate Grasshopper delivery fees
+      const { data: deliveries } = await supabase
+        .from('deliveries')
+        .select('delivery_fee')
+        .eq('session_id', currentSession.id)
+        .eq('status', 'completed')
+      
+      const grasshopperFees = deliveries ? deliveries.reduce((sum, delivery) => sum + (delivery.delivery_fee || 0), 0) : 0
+      
       await printingService.printCashUpReceipt({
         transactionNumber: `CASHUP-${Date.now()}`,
         sessionNumber: currentSession.sessionNumber,
@@ -165,15 +272,22 @@ export const CashUpPage: React.FC<CashUpPageProps> = ({
         openingFloat: currentSession.openingAmount,
         cashSales: currentSession.sales.cash,
         cardSales: currentSession.sales.card,
-        cashDrops: 0, // TODO: Get from session data
-        cashPayouts: 0, // TODO: Get from session data
-        closingBalance: actualAmount,
+        cashDrops: cashDrops,
+        cashPayouts: cashPayouts,
+        closingBalance: expectedAmount,
         countedCash: actualAmount,
         variance: difference,
-        notes: notes
+        notes: notes || 'Cash up completed',
+        paymentMethods,
+        productCategories,
+        transactionTypes,
+        grasshopperFees
       })
+      
+      console.log('Cash up receipt printed successfully')
     } catch (error) {
       console.error('Error printing cashup receipt:', error)
+      throw error // Re-throw to be caught by caller
     }
   }
 
@@ -659,6 +773,15 @@ export const CashUpPage: React.FC<CashUpPageProps> = ({
               />
             </div>
             
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+              <div className="flex items-center">
+                <Receipt className="h-4 w-4 text-blue-600 mr-2" />
+                <span className="text-sm text-blue-800">
+                  You can print a cashup receipt after reconciliation.
+                </span>
+              </div>
+            </div>
+            
             <div className="flex space-x-3">
               <Button
                 onClick={handleReconcileSession}
@@ -667,9 +790,16 @@ export const CashUpPage: React.FC<CashUpPageProps> = ({
                 Reconcile
               </Button>
               <Button
+                onClick={handlePrintReceipt}
+                variant="outline"
+                className="px-4 border-black hover:bg-black hover:text-white"
+              >
+                Print Receipt
+              </Button>
+              <Button
                 variant="outline"
                 onClick={() => setShowReconcileModal(false)}
-                className="flex-1"
+                className="px-4"
               >
                 Cancel
               </Button>

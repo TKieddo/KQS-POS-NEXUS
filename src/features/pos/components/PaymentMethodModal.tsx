@@ -24,6 +24,8 @@ interface PaymentMethodModalProps {
   totalAmount: number
   isSplitPayment?: boolean
   hasSelectedCustomer?: boolean
+  onLaybyePaymentSelect?: (amount: number) => void
+  showLaybyeOption?: boolean
 }
 
 type UiMethod = {
@@ -84,7 +86,9 @@ export const PaymentMethodModal: React.FC<PaymentMethodModalProps> = ({
   onPaymentMethodSelect,
   totalAmount,
   isSplitPayment = false,
-  hasSelectedCustomer = false
+  hasSelectedCustomer = false,
+  onLaybyePaymentSelect,
+  showLaybyeOption = false
 }) => {
   console.log('🎯 PaymentMethodModal: Component rendered, onPaymentMethodSelect:', typeof onPaymentMethodSelect)
   
@@ -260,6 +264,29 @@ export const PaymentMethodModal: React.FC<PaymentMethodModalProps> = ({
                 </div>
               </div>
             ))}
+            
+            {/* Laybye Payment Option */}
+            {showLaybyeOption && onLaybyePaymentSelect && (
+              <div
+                className="group cursor-pointer transition-all duration-200 hover:shadow-lg border-2 border-[#E5FF29] hover:border-[#E5FF29]/80 rounded-2xl overflow-hidden hover:scale-[1.02] backdrop-blur-sm"
+                onClick={() => onLaybyePaymentSelect(totalAmount)}
+              >
+                <div className="p-6">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-[#E5FF29] hover:bg-[#E5FF29]/90 transition-colors duration-200 shadow-sm">
+                      <CreditCard className="h-6 w-6 text-black" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-gray-900 text-base">Laybye Payment</h3>
+                      <p className="text-sm text-gray-600 mt-1">Pay towards existing laybye order</p>
+                    </div>
+                    <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                      <div className="w-2 h-2 bg-[#E5FF29] rounded-full"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Error Message */}

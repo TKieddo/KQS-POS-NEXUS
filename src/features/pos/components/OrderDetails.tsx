@@ -20,6 +20,8 @@ import { Input } from '@/components/ui/input'
 import { formatCurrency } from '@/lib/utils'
 import { usePOSSettingsHook } from '@/hooks/usePOSSettings'
 import { getPaymentOption } from '@/lib/payment-options-service'
+import { printTransactionReceipt } from '@/lib/receipt-printing-service'
+import { toast } from 'sonner'
 import { DiscountModal } from './DiscountModal'
 import { LaybyeModal } from './LaybyeModal'
 import { PaymentMethodModal } from './PaymentMethodModal'
@@ -48,7 +50,13 @@ interface OrderDetailsProps {
     change: number
     transactionNumber?: string
   } | null
-  onLaybyePaymentComplete?: () => void
+  onLaybyePaymentComplete?: (paymentDetails: {
+    paymentMethod: string
+    depositAmount: number
+    amountPaid: number
+    change: number
+    transactionNumber: string
+  }) => void
 }
 
 export const OrderDetails: React.FC<OrderDetailsProps> = ({
@@ -94,6 +102,18 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
   // VAT is already included in product prices, so no additional tax calculation
   const taxAmount = 0
   const finalTotal = total - discount
+
+  // Auto-print receipt when laybye payment success is shown
+  useEffect(() => {
+    if (showLaybyePaymentSuccess && laybyePaymentDetails) {
+      // Auto-print receipt after a short delay to ensure UI is rendered
+      const timer = setTimeout(() => {
+        handlePrintReceipt()
+      }, 500)
+      
+      return () => clearTimeout(timer)
+    }
+  }, [showLaybyePaymentSuccess, laybyePaymentDetails])
   
   // Calculate remaining amount for split payments
   const totalPaid = splitPayments.reduce((sum, payment) => sum + payment.amount, 0)
@@ -251,6 +271,69 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
     addSplitPayment(paymentMethod, amount)
   }
 
+  const handleLaybyePaymentSelect = async (amount: number) => {
+    console.log('🎯 OrderDetails: handleLaybyePaymentSelect called with amount:', amount)
+    
+    // Close payment method modal
+    setShowPaymentMethodModal(false)
+    
+    // For laybye installment payments, we need to process this as a sale transaction
+    // so it appears in sales reports and cash up calculations
+    
+    try {
+      // IMPORTANT: Create a sale record for the laybye installment payment
+      // This ensures the payment is recorded in sales and till sessions
+      const { createSale } = await import('@/lib/sales-service')
+      
+      const saleData = {
+        customer_id: customer?.id,
+        branch_id: '00000000-0000-0000-0000-000000000001', // TODO: Get from context
+        items: [], // No items for laybye installment - it's just a payment transaction
+        subtotal: amount,
+        tax_amount: 0,
+        discount_amount: 0,
+        total_amount: amount,
+        payment_method: 'cash', // Default, will be updated by payment method selection
+        payment_status: 'completed' as const,
+        sale_type: 'laybye' as const,
+        notes: `Laybye installment payment`
+      }
+      
+      const saleResult = await createSale(saleData)
+      
+      if (!saleResult.success) {
+        console.error('Failed to create sale record for laybye installment payment:', saleResult.error)
+        toast.error('Payment processed but failed to record in sales')
+        return
+      }
+      
+      console.log('Sale record created for laybye installment payment:', saleResult.data)
+      
+      // Generate transaction number for laybye payment
+      const now = new Date()
+      const transactionNumber = saleResult.data.transaction_number
+      
+      // Set laybye payment details to trigger the laybye payment success modal
+      const laybyePaymentDetails = {
+        paymentMethod: 'cash', // Will be updated by payment method selection
+        depositAmount: amount,
+        amountPaid: amount,
+        change: 0,
+        transactionNumber: transactionNumber
+      }
+      
+      // This should trigger the laybye payment success modal instead of regular sale success modal
+      // We need to pass this data to the parent component
+      if (onLaybyePaymentComplete) {
+        onLaybyePaymentComplete(laybyePaymentDetails)
+      }
+      
+    } catch (error) {
+      console.error('Error processing laybye installment payment:', error)
+      toast.error('Failed to process laybye installment payment')
+    }
+  }
+
   const handleDiscountApplied = (discountAmount: number, type: 'percentage' | 'fixed') => {
     setDiscount(discountAmount)
     setDiscountType(type)
@@ -267,10 +350,130 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
     onHoldOrder?.()
   }
 
-  const handlePrintReceipt = () => {
-    // TODO: Implement actual receipt printing
-    console.log('Printing receipt for transaction:', lastPaymentDetails)
-    alert('Receipt printed successfully!')
+  const handlePrintReceipt = async () => {
+    try {
+      if (laybyePaymentDetails) {
+        // Determine if this is a deposit payment or final payment
+        const isDepositPayment = laybyePaymentDetails.depositAmount === laybyePaymentDetails.amountPaid
+        
+        if (isDepositPayment) {
+          // Print LAYBYE PAYMENT RECEIPT for deposit/installment payments using the new template
+          const receiptData = {
+            // Business Information
+            business_name: 'KQS',
+            business_address: 'Maseru, Husteds opposite Queen II',
+            business_phone: '2700 7795',
+            business_website: 'kqs-boutique.com',
+            
+            // Transaction Information
+            receipt_number: laybyePaymentDetails.transactionNumber || 'KQS-2024-001235',
+            laybye_id: '52467', // TODO: Get from laybye order
+            payment_id: '13099', // TODO: Generate unique payment ID
+            date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }),
+            time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+            cashier_name: 'Hape', // TODO: Get from auth context
+            customer_name: 'NTEBALENG TAELO', // TODO: Get from customer context
+            
+            // Items (TODO: Get from laybye order)
+            items: [
+              { name: 'ADIDAS Sneakers', quantity: 1, price: 850.00, total: 850.00, category: 'Shoes' },
+              { name: 'Designer Dress', quantity: 1, price: 1200.00, total: 1200.00, category: 'Clothing' },
+              { name: 'Luxury Handbag', quantity: 1, price: 950.00, total: 950.00, category: 'Accessories' }
+            ],
+            
+            // Payment Information
+            subtotal: 3000.00, // TODO: Calculate from items
+            total: 3000.00, // TODO: Calculate from laybye order
+            payment_method: laybyePaymentDetails.paymentMethod?.toUpperCase() || 'CASH',
+            amount_paid: laybyePaymentDetails.amountPaid,
+            change: laybyePaymentDetails.change || 0.00,
+            
+            // Laybye Progress Information
+            total_already_paid: 1800.00, // TODO: Calculate from laybye payments
+            remaining_balance: 750.00, // TODO: Calculate from laybye order
+            laybye_start_date: '2024-10-15', // TODO: Get from laybye order
+            expiry_date: '2025-01-15', // TODO: Calculate from laybye order
+            days_remaining: 45, // TODO: Calculate
+            months_remaining: 1, // TODO: Calculate
+            days_remaining_in_month: 15 // TODO: Calculate
+          }
+
+          const printResult = await printTransactionReceipt({
+            transactionType: 'laybye_payment',
+            branchId: '00000000-0000-0000-0000-000000000001', // TODO: Get from context
+            transactionData: receiptData
+          })
+
+          if (printResult.success) {
+            toast.success('Laybye payment receipt printed successfully!')
+          } else {
+            toast.error('Failed to print laybye payment receipt')
+          }
+        } else {
+          // Print FINAL LAYBYE PAYMENT RECEIPT for final payments
+          const receiptData = {
+            transactionNumber: laybyePaymentDetails.transactionNumber,
+            laybyeId: 'LAY-' + Date.now(), // Generate laybye ID
+            paymentId: 'FINAL-' + Date.now(), // Final payment ID
+            date: new Date().toLocaleDateString('en-GB'),
+            time: new Date().toLocaleTimeString('en-GB'),
+            cashier: 'Cashier', // TODO: Get from auth context
+            customer: 'Customer', // TODO: Get from context
+            items: [], // TODO: Get from laybye order
+            total: laybyePaymentDetails.amountPaid,
+            paymentAmount: laybyePaymentDetails.amountPaid,
+            totalPaid: laybyePaymentDetails.amountPaid,
+            balanceRemaining: 0, // Final payment - no balance remaining
+            paymentMethod: laybyePaymentDetails.paymentMethod
+          }
+
+          const printResult = await printTransactionReceipt({
+            transactionType: 'laybye_final',
+            branchId: '00000000-0000-0000-0000-000000000001', // TODO: Get from context
+            transactionData: receiptData
+          })
+
+          if (printResult.success) {
+            toast.success('Final laybye payment receipt printed successfully!')
+          } else {
+            toast.error('Failed to print final laybye payment receipt')
+          }
+        }
+      } else if (lastPaymentDetails) {
+        // Print regular sale receipt
+        const receiptData = {
+          transactionNumber: lastPaymentDetails.transactionNumber,
+          date: new Date().toLocaleDateString('en-GB'),
+          time: new Date().toLocaleTimeString('en-GB'),
+          cashier: 'Cashier', // TODO: Get from auth context
+          customer: 'Customer', // TODO: Get from context
+          items: [], // TODO: Get from sale
+          subtotal: lastPaymentDetails.totalAmount,
+          tax: 0,
+          discount: 0,
+          total: lastPaymentDetails.totalAmount,
+          paymentMethod: lastPaymentDetails.paymentMethod,
+          amountPaid: lastPaymentDetails.amountPaid,
+          change: lastPaymentDetails.change || 0,
+          splitPayments: lastPaymentDetails.splitPayments || []
+        }
+
+        const printResult = await printTransactionReceipt({
+          transactionType: 'sale',
+          branchId: '00000000-0000-0000-0000-000000000001', // TODO: Get from context
+          transactionData: receiptData
+        })
+
+        if (printResult.success) {
+          toast.success('Sale receipt printed successfully!')
+        } else {
+          toast.error('Failed to print sale receipt')
+        }
+      }
+    } catch (error) {
+      console.error('Error printing receipt:', error)
+      toast.error('Failed to print receipt')
+    }
   }
 
   const handleNewSale = () => {
@@ -402,39 +605,39 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
   }
 
   if (showLaybyePaymentSuccess && laybyePaymentDetails && cart.length === 0) {
-    // Laybye Payment Success State - Completely Black Background
+    // Laybye Payment Success State - Ultra Compact with Sticky Buttons
     return (
       <>
         <div className="h-full flex flex-col bg-black relative overflow-hidden rounded-2xl shadow-2xl mr-1.5 mb-1.5" style={{ border: '0.5px solid #E5FF29' }}>
           {/* Subtle animated accent */}
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[#E5FF29]/50 to-transparent rounded-t-2xl"></div>
           
-          {/* Success Header - Compact */}
-          <div className="p-3 relative z-10 text-center border-b border-[#E5FF29]/20">
-            <div className="bg-green-500 rounded-full p-2 inline-block mb-2">
-              <CheckCircle className="h-6 w-6 text-white" />
+          {/* Success Header - Ultra Compact */}
+          <div className="p-2 relative z-10 text-center border-b border-[#E5FF29]/20">
+            <div className="bg-green-500 rounded-full p-1 inline-block mb-1">
+              <CheckCircle className="h-3 w-3 text-white" />
             </div>
-            <h2 className="text-lg font-bold text-white mb-1">Lay-bye Payment Successful!</h2>
+            <h2 className="text-sm font-bold text-white mb-0.5">Lay-bye Payment Successful!</h2>
             <p className="text-gray-300 text-xs">Deposit payment completed</p>
           </div>
 
-          {/* Payment Method - Compact and Minimal */}
-          <div className="p-3 relative z-10">
+          {/* Payment Method - Ultra Compact */}
+          <div className="p-2 relative z-10">
             <div className="text-center">
               <div className="text-[#E5FF29] mb-1 flex justify-center">
-                {paymentMethodIcons[laybyePaymentDetails.paymentMethod as keyof typeof paymentMethodIcons] || <DollarSign className="h-6 w-6" />}
+                {paymentMethodIcons[laybyePaymentDetails.paymentMethod as keyof typeof paymentMethodIcons] || <DollarSign className="h-4 w-4" />}
               </div>
-              <div className="text-white font-semibold text-sm capitalize">
+              <div className="text-white font-semibold text-xs capitalize">
                 {laybyePaymentDetails.paymentMethod} Payment
               </div>
             </div>
           </div>
 
-          {/* Transaction Details - Compact */}
-          <div className="flex-1 p-3 relative z-10 space-y-3 overflow-y-auto">
-            <div className="space-y-2">
+          {/* Transaction Details - Ultra Compact */}
+          <div className="flex-1 p-2 relative z-10 space-y-1.5 overflow-y-auto min-h-0">
+            <div className="space-y-1">
               <h3 className="text-white font-semibold text-xs uppercase tracking-wide">Transaction Details</h3>
-              <div className="space-y-1.5 text-sm">
+              <div className="space-y-0.5 text-xs">
                 <div className="flex justify-between">
                   <span className="text-gray-300">Deposit Amount:</span>
                   <span className="text-white font-semibold">{formatCurrency(laybyePaymentDetails.depositAmount)}</span>
@@ -444,7 +647,7 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
                   <span className="text-white">{formatCurrency(laybyePaymentDetails.amountPaid)}</span>
                 </div>
                 {laybyePaymentDetails.transactionNumber && (
-                  <div className="flex justify-between pt-1 border-t border-gray-600">
+                  <div className="flex justify-between pt-0.5 border-t border-gray-600">
                     <span className="text-gray-300">Transaction #:</span>
                     <span className="text-[#E5FF29] font-mono text-xs">{laybyePaymentDetails.transactionNumber}</span>
                   </div>
@@ -452,39 +655,57 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
               </div>
             </div>
 
-            {/* Change Display for Cash - Brand Yellow Background */}
+            {/* Change Display for Cash - Ultra Compact */}
             {laybyePaymentDetails.paymentMethod === 'cash' && laybyePaymentDetails.change > 0 && (
-              <div className="bg-[#E5FF29] rounded-lg p-4 text-center">
-                <div className="text-black font-bold text-sm mb-1">💰 CHANGE TO GIVE</div>
-                <div className="text-3xl font-black text-black mb-1">{formatCurrency(laybyePaymentDetails.change)}</div>
+              <div className="bg-[#E5FF29] rounded-lg p-2 text-center">
+                <div className="text-black font-bold text-xs mb-0.5">💰 CHANGE TO GIVE</div>
+                <div className="text-xl font-black text-black mb-0.5">{formatCurrency(laybyePaymentDetails.change)}</div>
                 <div className="text-black text-xs">Give to customer</div>
               </div>
             )}
 
-            {/* Perfect payment for non-cash */}
-            {laybyePaymentDetails.paymentMethod !== 'cash' && (
-              <div className="bg-[#E5FF29]/20 rounded-lg p-3 text-center">
-                <div className="text-[#E5FF29] text-sm font-semibold">Perfect Payment ✓</div>
-                <div className="text-gray-300 text-xs mt-1">Exact amount processed</div>
+            {/* Perfect payment for non-cash - Ultra Compact */}
+            {laybyePaymentDetails.paymentMethod !== 'cash' && laybyePaymentDetails.change === 0 && (
+              <div className="bg-[#E5FF29]/20 rounded-lg p-2 text-center">
+                <div className="text-[#E5FF29] text-xs font-semibold">Perfect Payment ✓</div>
+                <div className="text-gray-300 text-xs mt-0.5">Exact amount processed</div>
+              </div>
+            )}
+
+            {/* No change required message */}
+            {laybyePaymentDetails.change === 0 && (
+              <div className="bg-gray-800/50 rounded-lg p-2 text-center">
+                <div className="text-gray-300 text-xs">No change required - exact amount</div>
               </div>
             )}
           </div>
 
-          {/* Action Buttons - Compact */}
-          <div className="p-3 relative z-10 space-y-2">
+          {/* Sticky Action Buttons - Always Visible */}
+          <div className="p-2 relative z-10 space-y-1 flex-shrink-0 border-t border-[#E5FF29]/20">
             <Button
               onClick={handlePrintReceipt}
               variant="outline"
               size="sm"
-              className="w-full bg-gray-900/50 border-gray-600 text-white hover:bg-gray-800/50 h-9"
+              className="w-full bg-gray-900/50 border-gray-600 text-white hover:bg-gray-800/50 h-7 text-xs"
             >
-              <Receipt className="h-3 w-3 mr-2" />
+              <Receipt className="h-3 w-3 mr-1" />
               Print Receipt
             </Button>
             <Button
-              onClick={onLaybyePaymentComplete}
+              onClick={() => {
+                // Clear cart and start new sale
+                if (onLaybyePaymentComplete && laybyePaymentDetails?.transactionNumber) {
+                  onLaybyePaymentComplete({
+                    paymentMethod: laybyePaymentDetails.paymentMethod,
+                    depositAmount: laybyePaymentDetails.depositAmount,
+                    amountPaid: laybyePaymentDetails.amountPaid,
+                    change: laybyePaymentDetails.change,
+                    transactionNumber: laybyePaymentDetails.transactionNumber
+                  })
+                }
+              }}
               size="sm"
-              className="w-full bg-[#E5FF29] text-black font-semibold hover:bg-[#E5FF29]/90 h-9"
+              className="w-full bg-[#E5FF29] text-black font-semibold hover:bg-[#E5FF29]/90 h-7 text-xs"
             >
               Start New Sale
             </Button>
@@ -706,6 +927,8 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
         totalAmount={remainingToPay}
         isSplitPayment={splitPayments.length > 0}
         hasSelectedCustomer={!!customer}
+        showLaybyeOption={true}
+        onLaybyePaymentSelect={handleLaybyePaymentSelect}
       />
 
       <LaybyeModal

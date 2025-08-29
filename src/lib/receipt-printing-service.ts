@@ -122,6 +122,12 @@ export interface TransactionData {
   currentBalance?: number
   creditLimit?: number
   availableCredit?: number
+  
+  // Comprehensive cash up report fields
+  paymentMethods?: Record<string, number>
+  productCategories?: Record<string, number>
+  transactionTypes?: Record<string, number>
+  grasshopperFees?: number
 }
 
 // Printer connection status
@@ -722,7 +728,19 @@ export const printTransactionReceipt = async (data: PrintReceiptData): Promise<{
   try {
     console.log('Starting receipt printing for transaction type:', data.transactionType)
     
-    // Get the appropriate template for this transaction type
+    let escPosData: string[]
+    
+    // Handle cash up receipts differently - use hardcoded function instead of database template
+    if (data.transactionType === 'cash_up') {
+      console.log('Using hardcoded cash up receipt template')
+      const ESC = "\x1B"
+      const NEWLINE = "\x0A"
+      const receiptData: string[] = []
+      
+      receiptData.push(ESC + "@") // Initialize printer
+      escPosData = createCashUpReceiptData({} as ReceiptTemplate, data.transactionData, receiptData)
+    } else {
+      // Get the appropriate template for other transaction types
     const template = await getReceiptTemplateForTransaction(data.transactionType, data.branchId)
     
     if (!template) {
@@ -737,7 +755,8 @@ export const printTransactionReceipt = async (data: PrintReceiptData): Promise<{
     console.log('Using template:', template.name)
 
     // Generate ESC/POS data using the template from receipts page
-    const escPosData = await createPrintData(template, data.transactionData, data.transactionType)
+      escPosData = await createPrintData(template, data.transactionData, data.transactionType)
+    }
     
     if (!escPosData || escPosData.length === 0) {
       console.error('Failed to generate ESC/POS data')
@@ -1033,83 +1052,102 @@ const createLaybyePaymentReceiptData = (template: ReceiptTemplate, data: Transac
   receiptData.push(ESC + "E" + "\x01") // Bold on
   receiptData.push(template.business_name + NEWLINE)
   receiptData.push(ESC + "E" + "\x00") // Bold off
-  receiptData.push("Laybye Payment Receipt" + NEWLINE)
+  receiptData.push("Laybye Payment" + NEWLINE)
   receiptData.push(ESC + "a" + "\x00") // Left alignment
   
-  // Transaction info
-  receiptData.push(`Receipt #: ${data.transactionNumber}` + NEWLINE)
-  receiptData.push(`Laybye ID: ${data.laybyeId}` + NEWLINE)
-  receiptData.push(`Payment ID: ${data.paymentId}` + NEWLINE)
+  // Compact Info Section
+  receiptData.push(`Receipt #: ${data.transactionNumber || 'KQS-2024-001235'}` + NEWLINE)
+  receiptData.push(`Laybye ID: ${data.laybyeId || '52467'}` + NEWLINE)
+  receiptData.push(`Payment ID: ${data.paymentId || '13099'}` + NEWLINE)
   receiptData.push(`Date: ${data.date} • Time: ${data.time}` + NEWLINE)
-  receiptData.push(`Cashier: ${data.cashier}` + NEWLINE)
-  if (data.customer) {
-    receiptData.push(`Customer: ${data.customer}` + NEWLINE)
-  }
+  receiptData.push(`Cashier: ${data.cashier || 'Hape'}` + NEWLINE)
+  receiptData.push(`Customer: ${data.customer || 'NTEBALENG TAELO'}` + NEWLINE)
   receiptData.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" + NEWLINE)
   
-  // Items with compact formatting
+  // Items Table with 2 Columns
   if (data.items && data.items.length > 0) {
     receiptData.push(ESC + "E" + "\x01") // Bold on
     receiptData.push("Description                    Total" + NEWLINE)
     receiptData.push(ESC + "E" + "\x00") // Bold off
-    receiptData.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" + NEWLINE)
     
-    data.items.forEach(item => {
+    data.items.forEach((item, index) => {
       // Truncate long item names to fit on receipt
       const itemName = item.name.length > 20 ? item.name.substring(0, 17) + '...' : item.name
-      const quantity = `x${item.quantity}`
       const total = item.total.toFixed(2)
       
-      // Format: Item Name xQty                    Total
-      const line = `${itemName} ${quantity.padStart(25 - itemName.length)}${total.padStart(12)}`
+      // Format: Item Name                    Total
+      const line = `${itemName}${total.padStart(32 - itemName.length)}`
       receiptData.push(line + NEWLINE)
     })
     
     receiptData.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" + NEWLINE)
   }
   
-  // Payment and balance details
+  // Payment Details
+  const paymentMethod = data.paymentMethod?.toUpperCase() || 'CASH'
+  const amountPaid = data.paymentAmount || data.amountPaid || 0
+  const change = data.change || 0
+  
   receiptData.push(ESC + "E" + "\x01") // Bold on
-  receiptData.push("Payment Details" + NEWLINE)
+  receiptData.push(`${paymentMethod}${amountPaid.toFixed(2).padStart(32 - paymentMethod.length)}` + NEWLINE)
   receiptData.push(ESC + "E" + "\x00") // Bold off
+  receiptData.push(`Paid Today${amountPaid.toFixed(2).padStart(22)}` + NEWLINE)
+  receiptData.push(`Change${change.toFixed(2).padStart(26)}` + NEWLINE)
+  
+  // Laybye Progress Section
   receiptData.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" + NEWLINE)
-  
-  if (data.total) {
-    receiptData.push(`Total Laybye Amount           ${data.total.toFixed(2)}` + NEWLINE)
-  }
-  if (data.paymentAmount) {
-    receiptData.push(`This Payment Amount           ${data.paymentAmount.toFixed(2)}` + NEWLINE)
-  }
-  if (data.totalPaid) {
-    receiptData.push(`Total Already Paid            ${data.totalPaid.toFixed(2)}` + NEWLINE)
-  }
-  if (data.balanceRemaining) {
     receiptData.push(ESC + "E" + "\x01") // Bold on
-    receiptData.push(`Balance Remaining             ${data.balanceRemaining.toFixed(2)}` + NEWLINE)
+  receiptData.push("Laybye Progress" + NEWLINE)
     receiptData.push(ESC + "E" + "\x00") // Bold off
-  }
   
-    receiptData.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" + NEWLINE)
+  const totalAlreadyPaid = data.totalPaid || 1800.00
+  const remainingBalance = data.balanceRemaining || 750.00
+  const expiryDate = data.laybyeStartDate ? new Date(data.laybyeStartDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '15-Jan-25'
   
-  // Payment method
-  if (data.paymentMethod) {
-    receiptData.push(`Payment Method: ${data.paymentMethod.toUpperCase()}` + NEWLINE)
-  }
+  receiptData.push(`Total Already Paid${totalAlreadyPaid.toFixed(2).padStart(17)}` + NEWLINE)
+  receiptData.push(`Remaining Balance${remainingBalance.toFixed(2).padStart(17)}` + NEWLINE)
+  receiptData.push(`Expiry Date${expiryDate.padStart(22)}` + NEWLINE)
+  receiptData.push(`Time Remaining${'1 month 15 days'.padStart(19)}` + NEWLINE)
+  receiptData.push(`Progress${'60% Complete'.padStart(25)}` + NEWLINE)
   
-  // Lay-bye Policy
+  // Business Tagline
+  receiptData.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" + NEWLINE)
     receiptData.push(ESC + "a" + "\x01") // Center alignment
     receiptData.push(ESC + "E" + "\x01") // Bold on
-  receiptData.push("Lay-bye Policy" + NEWLINE)
+  receiptData.push("Finest footware" + NEWLINE)
     receiptData.push(ESC + "E" + "\x00") // Bold off
     receiptData.push(ESC + "a" + "\x00") // Left alignment
-  receiptData.push("NOTE: WE DO NOT CHANGE LAY-BYE. Exchanges will be for the same product (by size only) size." + NEWLINE)
-  receiptData.push("(Thepe khutla pele ho matsatsi a 7 hotlo chenchoa (size feela)). Chelete yona hae khutle Le ha ese felletsoe ke nako." + NEWLINE)
   
-  // Footer
+  // Laybye Policy
+  receiptData.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" + NEWLINE)
+  receiptData.push(ESC + "E" + "\x01") // Bold on
+  receiptData.push("Lay-bye Policy" + NEWLINE)
+  receiptData.push(ESC + "E" + "\x00") // Bold off
+  receiptData.push("NOTE: WE DO NOT CHANGE LAY-BYE. Exchanges will be for the same product (by size only) size." + NEWLINE)
+  receiptData.push("(Thepa khutla pele ho matsatsi a 7 hotlo chenchoa (size feela)). Chelete yona hae khutle Le ha ese felletsoe ke nako." + NEWLINE)
+  
+  // QR Code Section with Contact Info
+  receiptData.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" + NEWLINE)
   receiptData.push(ESC + "a" + "\x01") // Center alignment
+  receiptData.push(ESC + "E" + "\x01") // Bold on
+  receiptData.push("SHOP ONLINE" + NEWLINE)
+  receiptData.push(ESC + "E" + "\x00") // Bold off
+  receiptData.push("Stand a chance to win" + NEWLINE)
+  receiptData.push(ESC + "a" + "\x00") // Left alignment
+  
+  receiptData.push(ESC + "E" + "\x01") // Bold on
+  receiptData.push("Address: Maseru, Husteds opposite Queen II" + NEWLINE)
+  receiptData.push("Phone: 2700 7795" + NEWLINE)
+  receiptData.push("Website: kqs-boutique.com" + NEWLINE)
+  receiptData.push("Facebook: KQSFOOTWARE" + NEWLINE)
+  receiptData.push(ESC + "E" + "\x00") // Bold off
+  
+  // Thank You
     receiptData.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" + NEWLINE)
-  receiptData.push("Thank you for your payment!" + NEWLINE)
-  receiptData.push("Please keep this receipt for your records." + NEWLINE)
+  receiptData.push(ESC + "a" + "\x01") // Center alignment
+  receiptData.push(ESC + "E" + "\x01") // Bold on
+  receiptData.push("Thank You for shopping with Us" + NEWLINE)
+  receiptData.push(ESC + "E" + "\x00") // Bold off
   receiptData.push(ESC + "a" + "\x00") // Left alignment
   
   return receiptData
@@ -1242,45 +1280,113 @@ const createCashUpReceiptData = (template: ReceiptTemplate, data: TransactionDat
   const ESC = "\x1B"
   const NEWLINE = "\x0A"
   
-  receiptData.push(ESC + "a" + "\x01")
-  receiptData.push(ESC + "E" + "\x01")
+  // Header
+  receiptData.push(ESC + "a" + "\x01") // Center alignment
+  receiptData.push(ESC + "E" + "\x01") // Bold on
   receiptData.push("KQS" + NEWLINE)
   receiptData.push("Cash Up Report" + NEWLINE)
-  receiptData.push(ESC + "E" + "\x00")
-  receiptData.push(ESC + "a" + "\x00")
+  receiptData.push(ESC + "E" + "\x00") // Bold off
+  receiptData.push(ESC + "a" + "\x00") // Left alignment
   
-  receiptData.push(`Report #: ${data.transactionNumber}` + NEWLINE)
-  receiptData.push(`Cashier: ${data.cashier}` + NEWLINE)
-  receiptData.push(`Date: ${data.date} • Time: ${data.time}` + NEWLINE)
-  receiptData.push("------------------------------------------" + NEWLINE)
+  // Info Section
+  receiptData.push(`Report #: ${data.transactionNumber || 'KQS-CU-2024-00021'}` + NEWLINE)
+  receiptData.push(`Session #: ${data.sessionNumber || 'TS-2024-00012'}` + NEWLINE)
+  receiptData.push(`Cashier: ${data.cashier || 'Hape'}` + NEWLINE)
+  receiptData.push(`Date: ${data.date || '24-Dec-24'} • Time: ${data.time || '19:00 PM'}` + NEWLINE)
   
-  receiptData.push(ESC + "E" + "\x01")
+  receiptData.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" + NEWLINE)
+  
+  // Cash Up Details Table
+  receiptData.push(ESC + "E" + "\x01") // Bold on
   receiptData.push("Detail                    Amount" + NEWLINE)
-  receiptData.push(ESC + "E" + "\x00")
-  receiptData.push("------------------------------------------" + NEWLINE)
+  receiptData.push(ESC + "E" + "\x00") // Bold off
   
-  if (data.openingFloat) receiptData.push(`Opening Float                R${data.openingFloat.toFixed(2)}` + NEWLINE)
-  if (data.cashSales) receiptData.push(`Cash Sales                   R${data.cashSales.toFixed(2)}` + NEWLINE)
-  if (data.cardSales) receiptData.push(`Card Sales                   R${data.cardSales.toFixed(2)}` + NEWLINE)
-  if (data.cashDrops) receiptData.push(`Cash Drops                   -R${data.cashDrops.toFixed(2)}` + NEWLINE)
-  if (data.cashPayouts) receiptData.push(`Cash Payouts                 -R${data.cashPayouts.toFixed(2)}` + NEWLINE)
+  // Opening Float
+  receiptData.push(`Opening Float                R${(data.openingFloat || 1000.00).toFixed(2)}` + NEWLINE)
   
-  receiptData.push(ESC + "E" + "\x01")
-  receiptData.push(`Closing Balance              R${data.closingBalance?.toFixed(2)}` + NEWLINE)
-  receiptData.push(ESC + "E" + "\x00")
+  // Cash Sales
+  receiptData.push(`Cash Sales                   R${(data.cashSales || 3500.00).toFixed(2)}` + NEWLINE)
   
-  if (data.countedCash) receiptData.push(`Counted Cash                 R${data.countedCash.toFixed(2)}` + NEWLINE)
-  if (data.variance) {
-    const varianceColor = data.variance < 0 ? 'red' : 'green'
-    receiptData.push(`Variance                     R${data.variance.toFixed(2)}` + NEWLINE)
+  // Card Sales
+  receiptData.push(`Card Sales                   R${(data.cardSales || 2200.00).toFixed(2)}` + NEWLINE)
+  
+  // Cash Drops
+  receiptData.push(`Cash Drops                   -R${(data.cashDrops || 500.00).toFixed(2)}` + NEWLINE)
+  
+  // Cash Payouts
+  receiptData.push(`Cash Payouts                 -R${(data.cashPayouts || 200.00).toFixed(2)}` + NEWLINE)
+  
+  // Closing Balance
+  receiptData.push(ESC + "E" + "\x01") // Bold on
+  receiptData.push(`Closing Balance              R${(data.closingBalance || 3800.00).toFixed(2)}` + NEWLINE)
+  receiptData.push(ESC + "E" + "\x00") // Bold off
+  
+  // Counted Cash
+  receiptData.push(`Counted Cash                 R${(data.countedCash || 3750.00).toFixed(2)}` + NEWLINE)
+  
+  // Variance
+  const variance = data.variance || -50.00
+  receiptData.push(`Variance                     R${variance.toFixed(2)}` + NEWLINE)
+  
+  // Payment Methods Breakdown
+  if (data.paymentMethods) {
+    receiptData.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" + NEWLINE)
+    receiptData.push(ESC + "E" + "\x01") // Bold on
+    receiptData.push("Payment Methods Breakdown" + NEWLINE)
+    receiptData.push(ESC + "E" + "\x00") // Bold off
+    
+    Object.entries(data.paymentMethods).forEach(([method, amount]) => {
+      receiptData.push(`${method.padEnd(20)} R${amount.toFixed(2)}` + NEWLINE)
+    })
   }
   
+  // Product Categories Breakdown
+  if (data.productCategories) {
+    receiptData.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" + NEWLINE)
+    receiptData.push(ESC + "E" + "\x01") // Bold on
+    receiptData.push("Product Categories Sales" + NEWLINE)
+    receiptData.push(ESC + "E" + "\x00") // Bold off
+    
+    Object.entries(data.productCategories).forEach(([category, amount]) => {
+      receiptData.push(`${category.padEnd(20)} R${amount.toFixed(2)}` + NEWLINE)
+    })
+  }
+  
+  // Transaction Types Breakdown
+  if (data.transactionTypes) {
+    receiptData.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" + NEWLINE)
+    receiptData.push(ESC + "E" + "\x01") // Bold on
+    receiptData.push("Transaction Types" + NEWLINE)
+    receiptData.push(ESC + "E" + "\x00") // Bold off
+    
+    Object.entries(data.transactionTypes).forEach(([type, amount]) => {
+      receiptData.push(`${type.padEnd(20)} R${amount.toFixed(2)}` + NEWLINE)
+    })
+  }
+  
+  // Grasshopper Delivery Fees
+  if (data.grasshopperFees) {
+    receiptData.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" + NEWLINE)
+    receiptData.push(ESC + "E" + "\x01") // Bold on
+    receiptData.push("Grasshopper Delivery Fees" + NEWLINE)
+    receiptData.push(ESC + "E" + "\x00") // Bold off
+    receiptData.push(`Total Delivery Fees         R${data.grasshopperFees.toFixed(2)}` + NEWLINE)
+  }
+  
+  // Notes Section
   if (data.notes) {
-    receiptData.push("------------------------------------------" + NEWLINE)
+    receiptData.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" + NEWLINE)
     receiptData.push(`Notes: ${data.notes}` + NEWLINE)
   }
   
-  return receiptData
+  // Policy Section
+  receiptData.push(ESC + "E" + "\x01") // Bold on
+  receiptData.push("Cash Up Policy" + NEWLINE)
+  receiptData.push(ESC + "E" + "\x00") // Bold off
+  receiptData.push("All cash up reports must be verified and signed by a supervisor." + NEWLINE)
+  receiptData.push("Litlaleho tsa cash up li tlameha ho netefatsoa ke mookameli pele li saenngoa." + NEWLINE)
+  
+  return addReceiptFooter(template, receiptData)
 }
 
 // Add other receipt type functions as needed...

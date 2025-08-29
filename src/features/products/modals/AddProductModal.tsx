@@ -12,7 +12,7 @@ import { VariantManager, type ProductVariant as VariantManagerProductVariant } f
 import { AIVariantDetector } from '../components/AIVariantDetector'
 import { ColorImageSelector } from '../components/ColorImageSelector'
 import type { Product as SupabaseProduct } from '@/lib/supabase'
-import { uploadProductImage, createProductImage, supabase } from '@/lib/supabase'
+import { uploadProductImage, createProductImage, supabase, ensureStorageBuckets } from '@/lib/supabase'
 import { AIDescriptionGenerator } from '../components/AIDescriptionGenerator'
 import { AITitleGenerator } from '../components/AITitleGenerator'
 import type { ProductInfo } from '@/lib/ai-services'
@@ -73,13 +73,20 @@ interface AddProductModalProps {
   onProductAdded?: () => void
 }
 
-function generateBarcode(input: string): string {
+function generateBarcode(input: string, suffix?: string): string {
   let hash = 0
-  for (let i = 0; i < input.length; i++) {
-    hash = ((hash << 5) - hash) + input.charCodeAt(i)
+  const inputWithSuffix = suffix ? `${input}-${suffix}` : input
+  
+  for (let i = 0; i < inputWithSuffix.length; i++) {
+    hash = ((hash << 5) - hash) + inputWithSuffix.charCodeAt(i)
     hash |= 0
   }
-  return Math.abs(hash).toString().padStart(12, '0').slice(0, 12)
+  
+  // Add timestamp to make it more unique
+  const timestamp = Date.now().toString().slice(-6)
+  const baseBarcode = Math.abs(hash).toString().padStart(8, '0')
+  
+  return `${baseBarcode}${timestamp}`.slice(0, 12)
 }
 
 export const AddProductModal = ({ isOpen, onClose, onProductAdded }: AddProductModalProps) => {
@@ -160,13 +167,13 @@ export const AddProductModal = ({ isOpen, onClose, onProductAdded }: AddProductM
     loadVariantOptions()
   }, [productData.category_id])
 
-  // Auto-generate barcode when name or SKU changes
+  // Auto-generate barcode when name or SKU changes (only for products without variants)
   useEffect(() => {
     const base = productData.sku || productData.name
-    if (base && !productData.barcode) {
+    if (base && !productData.barcode && variants.length === 0) {
       setProductData(prev => ({ ...prev, barcode: generateBarcode(base) }))
     }
-  }, [productData.name, productData.sku, productData.barcode])
+  }, [productData.name, productData.sku, productData.barcode, variants.length])
 
   const handleSave = async () => {
     console.log('🚀 [DEBUG] AddProductModal: handleSave started')
@@ -187,6 +194,30 @@ export const AddProductModal = ({ isOpen, onClose, onProductAdded }: AddProductM
     setIsSubmitting(true)
 
     try {
+      // 0. Ensure storage buckets exist before uploading images
+      console.log('🗄️ [DEBUG] Ensuring storage buckets exist...')
+      try {
+        const { data: bucket, error } = await supabase.storage.getBucket('product-images')
+        if (error && error.message.includes('not found')) {
+          console.log('🗄️ [DEBUG] Creating product-images bucket...')
+          const { error: createError } = await supabase.storage.createBucket('product-images', {
+            public: true,
+            allowedMimeTypes: ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'],
+            fileSizeLimit: 10485760 // 10MB
+          })
+          if (createError) {
+            console.error('❌ [DEBUG] Failed to create bucket:', createError)
+          } else {
+            console.log('✅ [DEBUG] Successfully created product-images bucket')
+          }
+        } else if (error) {
+          console.error('❌ [DEBUG] Error checking bucket:', error)
+        } else {
+          console.log('✅ [DEBUG] product-images bucket exists')
+        }
+      } catch (bucketError) {
+        console.error('❌ [DEBUG] Error ensuring storage buckets:', bucketError)
+      }
       // 1. Upload images to Supabase
       console.log('🖼️ [DEBUG] Starting image upload process')
       console.log('📸 [DEBUG] Images to upload:', images.length)
@@ -247,7 +278,8 @@ export const AddProductModal = ({ isOpen, onClose, onProductAdded }: AddProductM
         max_stock_level: productData.max_stock_level ? parseInt(productData.max_stock_level) : null,
         unit: productData.unit,
         sku: productData.sku || null,
-        barcode: productData.barcode || null,
+        // Don't set barcode for main product if it has variants - only variants should have barcodes
+        barcode: variants.length > 0 ? null : (productData.barcode || null),
         is_active: true,
         image_url: mainImageUrl,
         has_variants: variants.length > 0,
@@ -260,6 +292,12 @@ export const AddProductModal = ({ isOpen, onClose, onProductAdded }: AddProductM
 
       console.log('📦 [DEBUG] Product data to save:', JSON.stringify(productToSave, null, 2))
       console.log('🔢 [DEBUG] Variants count:', variants.length)
+      console.log('🏷️ [DEBUG] Barcode logic:', {
+        hasVariants: variants.length > 0,
+        originalBarcode: productData.barcode,
+        finalBarcode: productToSave.barcode,
+        reason: variants.length > 0 ? 'No barcode for main product with variants' : 'Barcode allowed for single product'
+      })
       if (variants.length > 0) {
         console.log('🔢 [DEBUG] Variants data:', JSON.stringify(variants, null, 2))
       }

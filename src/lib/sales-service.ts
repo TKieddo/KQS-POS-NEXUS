@@ -70,13 +70,14 @@ export const createSale = async (saleData: CreateSaleData): Promise<{ success: b
     // Insert sale items
     if (saleData.items && saleData.items.length > 0) {
       const saleItems = saleData.items.map(item => ({
-      sale_id: sale.id,
-      product_id: item.product.id,
-      quantity: item.quantity,
-      unit_price: item.unitPrice,
-      total_price: item.totalPrice,
-      discount_amount: item.discount || 0
-    }))
+        sale_id: sale.id,
+        product_id: item.product.id,
+        variant_id: item.variantId || null, // Include variant_id if available
+        quantity: item.quantity,
+        unit_price: item.unitPrice,
+        total_price: item.totalPrice,
+        discount_amount: item.discount || 0
+      }))
 
     const { error: itemsError } = await supabase
       .from('sale_items')

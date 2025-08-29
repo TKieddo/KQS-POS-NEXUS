@@ -121,7 +121,72 @@ export function LaybyeManagement() {
       })
 
       if (result.success) {
-        toast.success('Payment added successfully!')
+        // Print laybye payment receipt
+        try {
+          const { printTransactionReceipt } = await import('@/lib/receipt-printing-service')
+          
+          // Get laybye order details for receipt
+          const laybyeOrder = selectedLaybye
+          const customerName = getCustomerName(laybyeOrder.customer)
+          
+          const receiptData = {
+            // Business Information
+            business_name: 'KQS',
+            business_address: 'Maseru, Husteds opposite Queen II',
+            business_phone: '2700 7795',
+            business_website: 'kqs-boutique.com',
+            
+            // Transaction Information
+            receipt_number: result.data?.transaction_number || `LAY-${Date.now()}`,
+            laybye_id: laybyeOrder.order_number || laybyeOrder.id,
+            payment_id: `PAY-${Date.now()}`,
+            date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }),
+            time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+            cashier_name: 'Admin', // TODO: Get from auth context
+            customer_name: customerName,
+            
+            // Items (from laybye order)
+            items: laybyeOrder.laybye_items?.map((item: any) => ({
+              name: item.product?.name || 'Unknown Product',
+              quantity: item.quantity || 1,
+              price: item.unit_price || 0,
+              total: item.total_price || 0,
+              category: item.product?.category?.name || 'Accessories'
+            })) || [],
+            
+            // Payment Information
+            subtotal: laybyeOrder.total_amount || 0,
+            total: laybyeOrder.total_amount || 0,
+            payment_method: paymentMethod.toUpperCase(),
+            amount_paid: parseFloat(paymentAmount),
+            change: 0,
+            
+            // Laybye Progress Information
+            total_already_paid: (laybyeOrder.laybye_payments || []).reduce((sum: number, payment: any) => sum + (payment.amount || 0), 0) + parseFloat(paymentAmount),
+            remaining_balance: Math.max(0, (laybyeOrder.total_amount || 0) - (laybyeOrder.deposit_amount || 0) - (laybyeOrder.laybye_payments || []).reduce((sum: number, payment: any) => sum + (payment.amount || 0), 0) - parseFloat(paymentAmount)),
+            laybye_start_date: laybyeOrder.created_at ? new Date(laybyeOrder.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Unknown',
+            expiry_date: laybyeOrder.due_date ? new Date(laybyeOrder.due_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Unknown',
+            days_remaining: laybyeOrder.due_date ? Math.max(0, Math.ceil((new Date(laybyeOrder.due_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))) : 0,
+            months_remaining: 0, // TODO: Calculate
+            days_remaining_in_month: 0 // TODO: Calculate
+          }
+
+          const printResult = await printTransactionReceipt({
+            transactionType: 'laybye_payment',
+            branchId: laybyeOrder.branch_id || '00000000-0000-0000-0000-000000000001',
+            transactionData: receiptData
+          })
+
+          if (printResult.success) {
+            toast.success('Payment added and receipt printed successfully!')
+          } else {
+            toast.success('Payment added successfully! (Receipt printing failed)')
+          }
+        } catch (printError) {
+          console.error('Error printing receipt:', printError)
+          toast.success('Payment added successfully! (Receipt printing failed)')
+        }
+        
         setShowPaymentModal(false)
         setShowCashPaymentModal(false)
         setPaymentAmount('')

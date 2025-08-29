@@ -4,23 +4,7 @@ import { useAuth } from '@/context/AuthContext'
 import { toast } from 'sonner'
 import { supabase } from './supabase'
 
-export interface POSPrintingService {
-  printSaleReceipt: (saleData: SalePrintData) => Promise<void>
-  printLaybyePaymentReceipt: (laybyeData: LaybyePaymentPrintData) => Promise<void>
-  printLaybyeReserveReceipt: (laybyeData: LaybyeReservePrintData) => Promise<void>
-  printRefundReceipt: (refundData: RefundPrintData) => Promise<void>
-  printCashUpReceipt: (cashUpData: CashUpPrintData) => Promise<void>
-  printTillSessionReceipt: (sessionData: TillSessionPrintData) => Promise<void>
-  printCashDropReceipt: (dropData: CashDropPrintData) => Promise<void>
-  printAccountPaymentReceipt: (paymentData: AccountPaymentPrintData) => Promise<void>
-  printLaybyeCancellationReceipt: (cancellationData: LaybyeCancellationPrintData) => Promise<void>
-  printReturnsExchangeReceipt: (exchangeData: ReturnsExchangePrintData) => Promise<void>
-  printDeliveryReceipt: (deliveryData: DeliveryPrintData) => Promise<void>
-  printQuotationReceipt: (quotationData: QuotationPrintData) => Promise<void>
-  printOrderReceipt: (orderData: OrderPrintData) => Promise<void>
-  printCustomerStatementReceipt: (statementData: CustomerStatementPrintData) => Promise<void>
-  printIntermediateBillReceipt: (billData: IntermediateBillPrintData) => Promise<void>
-}
+// POSPrintingService class implements all printing methods
 
 // Data interfaces for different transaction types
 export interface SalePrintData {
@@ -104,6 +88,10 @@ export interface CashUpPrintData {
   countedCash: number
   variance: number
   notes?: string
+  paymentMethods?: Record<string, number>
+  productCategories?: Record<string, number>
+  transactionTypes?: Record<string, number>
+  grasshopperFees?: number
 }
 
 export interface TillSessionPrintData {
@@ -210,6 +198,7 @@ export interface OrderReceiptPrintData {
   }>
   depositRequired: number
   balanceOnDelivery: number
+  cashier?: string
 }
 
 export interface CustomerStatementPrintData {
@@ -436,6 +425,7 @@ export class POSPrintingService {
     const now = new Date()
     const transactionData: TransactionData = {
       transactionNumber: data.transactionNumber,
+      sessionNumber: data.sessionNumber,
       date: now.toLocaleDateString('en-GB'),
       time: now.toLocaleTimeString('en-GB'),
       cashier: data.cashier,
@@ -447,7 +437,11 @@ export class POSPrintingService {
       closingBalance: data.closingBalance,
       countedCash: data.countedCash,
       variance: data.variance,
-      notes: data.notes
+      notes: data.notes,
+      paymentMethods: data.paymentMethods,
+      productCategories: data.productCategories,
+      transactionTypes: data.transactionTypes,
+      grasshopperFees: data.grasshopperFees
     }
 
     await this.printReceipt('cash_up', transactionData)
@@ -547,6 +541,7 @@ export class POSPrintingService {
       transactionNumber: data.transactionNumber,
       date: now.toLocaleDateString('en-GB'),
       time: now.toLocaleTimeString('en-GB'),
+      cashier: this.cashier,
       customer: data.customer,
       address: data.address,
       phone: data.phone,
@@ -568,6 +563,7 @@ export class POSPrintingService {
       transactionNumber: data.transactionNumber,
       date: now.toLocaleDateString('en-GB'),
       time: now.toLocaleTimeString('en-GB'),
+      cashier: this.cashier,
       customer: data.customer,
       validUntil: data.validUntil,
       items: data.items.map(item => ({
@@ -590,6 +586,7 @@ export class POSPrintingService {
       transactionNumber: data.transactionNumber,
       date: now.toLocaleDateString('en-GB'),
       time: now.toLocaleTimeString('en-GB'),
+      cashier: this.cashier,
       customer: data.customer,
       expectedDelivery: data.expectedDelivery,
       items: data.items.map(item => ({
@@ -611,6 +608,7 @@ export class POSPrintingService {
       transactionNumber: data.transactionNumber,
       date: now.toLocaleDateString('en-GB'),
       time: now.toLocaleTimeString('en-GB'),
+      cashier: this.cashier,
       customer: data.customer,
       accountNumber: data.accountNumber,
       transactions: data.transactions,

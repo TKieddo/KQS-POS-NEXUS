@@ -76,6 +76,7 @@ export const createLaybyeOrder = async (laybyeData: CreateLaybyeData): Promise<{
     const laybyeItems = laybyeData.items.map(item => ({
       laybye_id: laybyeOrder.id,
       product_id: item.product.id,
+      variant_id: item.variantId || null, // Include variant_id if available
       quantity: item.quantity,
       unit_price: item.unitPrice,
       total_price: item.totalPrice
@@ -132,31 +133,61 @@ export const createLaybyeOrder = async (laybyeData: CreateLaybyeData): Promise<{
     if (laybyeData.branch_id) {
       for (const item of laybyeData.items) {
         try {
-          // Deduct from main product stock in branch_stock table
-          const { data: currentStock, error: fetchError } = await supabase
-            .from('branch_stock')
-            .select('stock_quantity')
-            .eq('product_id', item.product.id)
-            .eq('branch_id', laybyeData.branch_id)
-            .is('variant_id', null)
-            .single()
-
-          if (!fetchError && currentStock) {
-            const currentQuantity = currentStock.stock_quantity || 0
-            const newQuantity = Math.max(0, currentQuantity - item.quantity)
-
-            const { error: stockError } = await supabase
+          if (item.variantId) {
+            // For products with variants, deduct from variant stock
+            const { data: currentStock, error: fetchError } = await supabase
               .from('branch_stock')
-              .update({ 
-                stock_quantity: newQuantity,
-                updated_at: new Date().toISOString()
-              })
+              .select('stock_quantity')
+              .eq('product_id', item.product.id)
+              .eq('branch_id', laybyeData.branch_id)
+              .eq('variant_id', item.variantId)
+              .single()
+
+            if (!fetchError && currentStock) {
+              const currentQuantity = currentStock.stock_quantity || 0
+              const newQuantity = Math.max(0, currentQuantity - item.quantity)
+
+              const { error: stockError } = await supabase
+                .from('branch_stock')
+                .update({ 
+                  stock_quantity: newQuantity,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('product_id', item.product.id)
+                .eq('branch_id', laybyeData.branch_id)
+                .eq('variant_id', item.variantId)
+
+              if (stockError) {
+                console.error('Error deducting variant stock for product:', item.product.id, 'variant:', item.variantId, stockError)
+              }
+            }
+          } else {
+            // For products without variants, deduct from main product stock
+            const { data: currentStock, error: fetchError } = await supabase
+              .from('branch_stock')
+              .select('stock_quantity')
               .eq('product_id', item.product.id)
               .eq('branch_id', laybyeData.branch_id)
               .is('variant_id', null)
+              .single()
 
-            if (stockError) {
-              console.error('Error deducting stock for product:', item.product.id, stockError)
+            if (!fetchError && currentStock) {
+              const currentQuantity = currentStock.stock_quantity || 0
+              const newQuantity = Math.max(0, currentQuantity - item.quantity)
+
+              const { error: stockError } = await supabase
+                .from('branch_stock')
+                .update({ 
+                  stock_quantity: newQuantity,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('product_id', item.product.id)
+                .eq('branch_id', laybyeData.branch_id)
+                .is('variant_id', null)
+
+              if (stockError) {
+                console.error('Error deducting stock for product:', item.product.id, stockError)
+              }
             }
           }
         } catch (error) {
@@ -435,6 +466,47 @@ export const getLaybyeOrderById = async (laybyeId: string): Promise<{ success: b
 // Add payment to laybye order
 export const addLaybyePayment = async (paymentData: LaybyePaymentData): Promise<{ success: boolean; data?: any; error?: string }> => {
   try {
+    // IMPORTANT: Create a sale record for the laybye payment so it appears in sales and cash up
+    // This ensures the payment is recorded in cash up calculations
+    const { createSale } = await import('./sales-service')
+    
+    // Get laybye order details for sale record
+    const { data: laybyeOrderForSale, error: fetchError } = await supabase
+      .from('laybye_orders')
+      .select('total_amount, deposit_amount, remaining_balance, remaining_amount, branch_id, customer_id, order_number')
+      .eq('id', paymentData.laybye_id)
+      .single()
+
+    if (fetchError) {
+      console.error('Error fetching laybye order for sale record:', fetchError)
+      return { success: false, error: fetchError.message }
+    }
+
+    // Create sale record for the laybye payment
+    const saleData = {
+      customer_id: laybyeOrderForSale.customer_id,
+      branch_id: laybyeOrderForSale.branch_id || '00000000-0000-0000-0000-000000000001',
+      items: [], // No items for laybye payment - it's just a payment transaction
+      subtotal: paymentData.amount,
+      tax_amount: 0,
+      discount_amount: 0,
+      total_amount: paymentData.amount,
+      payment_method: paymentData.payment_method,
+      payment_status: 'completed' as const,
+      sale_type: 'laybye' as const,
+      notes: `Laybye installment payment for order ${laybyeOrderForSale.order_number}`
+    }
+    
+    const saleResult = await createSale(saleData)
+    
+    if (!saleResult.success) {
+      console.error('Failed to create sale record for laybye payment:', saleResult.error)
+      // Don't fail the entire operation, but log the error
+      console.warn('Laybye payment recorded but sale record creation failed')
+    } else {
+      console.log('Sale record created for laybye payment:', saleResult.data)
+    }
+
     // Create payment record
     const { data: payment, error: paymentError } = await supabase
       .from('laybye_payments')
@@ -453,16 +525,21 @@ export const addLaybyePayment = async (paymentData: LaybyePaymentData): Promise<
       return { success: false, error: paymentError.message }
     }
 
-    // Get laybye order details
-    const { data: laybyeOrder, error: fetchError } = await supabase
+    // Get laybye order details for balance calculation
+    const { data: laybyeOrder, error: fetchError2 } = await supabase
       .from('laybye_orders')
       .select('total_amount, deposit_amount, remaining_balance, remaining_amount, branch_id')
       .eq('id', paymentData.laybye_id)
       .single()
 
-    if (fetchError) {
-      console.error('Error fetching laybye order for payment:', fetchError)
-      return { success: false, error: fetchError.message }
+    if (fetchError2) {
+      console.error('Error fetching laybye order for payment:', fetchError2)
+      return { success: false, error: fetchError2.message }
+    }
+
+    if (!laybyeOrder) {
+      console.error('Laybye order not found for payment')
+      return { success: false, error: 'Laybye order not found' }
     }
 
     // Get all payments for this laybye order

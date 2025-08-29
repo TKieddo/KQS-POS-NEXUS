@@ -133,7 +133,7 @@ export const AddOrderModal: React.FC<AddOrderModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg max-w-md w-full mx-4 max-h-[90vh] flex flex-col">
+      <div className="bg-white rounded-lg max-w-2xl w-full mx-4 max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="p-6 border-b border-gray-200 flex-shrink-0">
           <div className="flex items-center justify-between">
@@ -152,8 +152,8 @@ export const AddOrderModal: React.FC<AddOrderModalProps> = ({
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-6">
           {/* Product Info */}
-          <div className="flex items-start space-x-4 mb-6">
-            <div className="w-24 h-24 bg-gray-100 rounded-lg flex-shrink-0">
+          <div className="flex items-start space-x-6 mb-6">
+            <div className="w-32 h-32 bg-gray-100 rounded-lg flex-shrink-0">
               {product.image_url ? (
                 <img
                   src={product.image_url}
@@ -162,20 +162,20 @@ export const AddOrderModal: React.FC<AddOrderModalProps> = ({
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
-                  <Package className="h-8 w-8 text-gray-400" />
+                  <Package className="h-12 w-12 text-gray-400" />
                 </div>
               )}
             </div>
             <div className="flex-1">
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              <h3 className="text-xl font-semibold text-gray-900 mb-3">
                 {product.name}
               </h3>
-              <p className="text-2xl font-bold text-gray-900 mb-2">
+              <p className="text-3xl font-bold text-gray-900 mb-3">
                 {formatCurrency(basePrice)}
               </p>
               {product.category_name && (
-                <Badge variant="secondary" className="text-xs">
-                  <Tag className="h-3 w-3 mr-1" />
+                <Badge variant="secondary" className="text-sm">
+                  <Tag className="h-4 w-4 mr-1" />
                   {product.category_name}
                 </Badge>
               )}
@@ -191,7 +191,7 @@ export const AddOrderModal: React.FC<AddOrderModalProps> = ({
               </div>
             )}
             
-            <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="grid grid-cols-3 gap-6 text-sm">
               <div className="flex items-center space-x-2">
                 <Hash className="h-4 w-4 text-gray-500" />
                 <span className="text-gray-600">SKU:</span>
@@ -205,10 +205,16 @@ export const AddOrderModal: React.FC<AddOrderModalProps> = ({
                   <span className="font-medium">{product.barcode}</span>
                 </div>
               )}
+              
+              <div className="flex items-center space-x-2">
+                <Package className="h-4 w-4 text-gray-500" />
+                <span className="text-gray-600">Unit:</span>
+                <span className="font-medium">{product.unit || 'piece'}</span>
+              </div>
             </div>
 
             {/* Stock Information & Variant Selector */}
-            <div className="bg-gray-50 rounded-lg p-3">
+            <div className="bg-gray-50 rounded-lg p-4">
               {product.has_variants && (
                 <div className="mb-3">
                   <div className="text-sm font-medium text-gray-700 mb-2">Variant</div>
@@ -251,32 +257,32 @@ export const AddOrderModal: React.FC<AddOrderModalProps> = ({
 
           {/* Quantity Selection */}
           <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-3">
+            <label className="block text-sm font-medium text-gray-700 mb-4">
               Quantity (Max: {maxQuantity})
             </label>
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center justify-center space-x-6">
               <Button
-                size="sm"
+                size="lg"
                 variant="outline"
                 onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                className="h-10 w-10 p-0"
+                className="h-12 w-12 p-0"
                 disabled={quantity <= 1}
               >
-                <Minus className="h-4 w-4" />
+                <Minus className="h-6 w-6" />
               </Button>
-              <span className="text-lg font-semibold w-12 text-center">{quantity}</span>
+              <span className="text-2xl font-bold w-16 text-center">{quantity}</span>
               <Button
-                size="sm"
+                size="lg"
                 variant="outline"
                 onClick={() => setQuantity(Math.min(maxQuantity, quantity + 1))}
-                className="h-10 w-10 p-0"
+                className="h-12 w-12 p-0"
                 disabled={quantity >= maxQuantity || maxQuantity === 0}
               >
-                <Plus className="h-4 w-4" />
+                <Plus className="h-6 w-6" />
               </Button>
             </div>
             {quantity > maxQuantity && maxQuantity > 0 && (
-              <p className="text-xs text-red-600 mt-1">
+              <p className="text-sm text-red-600 mt-2 text-center">
                 Cannot add more than available stock ({maxQuantity})
               </p>
             )}

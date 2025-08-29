@@ -30,6 +30,38 @@ export const STORAGE_BUCKETS = {
   BUSINESS_ASSETS: 'business-assets'
 } as const
 
+// Ensure storage buckets exist
+export async function ensureStorageBuckets() {
+  try {
+    const buckets = Object.values(STORAGE_BUCKETS)
+    
+    for (const bucketName of buckets) {
+      const { data: bucket, error } = await supabase.storage.getBucket(bucketName)
+      
+      if (error && error.message.includes('not found')) {
+        console.log(`Creating storage bucket: ${bucketName}`)
+        const { error: createError } = await supabase.storage.createBucket(bucketName, {
+          public: true,
+          allowedMimeTypes: ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'],
+          fileSizeLimit: 10485760 // 10MB
+        })
+        
+        if (createError) {
+          console.error(`Failed to create bucket ${bucketName}:`, createError)
+        } else {
+          console.log(`Successfully created bucket: ${bucketName}`)
+        }
+      } else if (error) {
+        console.error(`Error checking bucket ${bucketName}:`, error)
+      } else {
+        console.log(`Bucket ${bucketName} exists`)
+      }
+    }
+  } catch (error) {
+    console.error('Error ensuring storage buckets:', error)
+  }
+}
+
 // Image upload functions
 export async function uploadProductImage(
   file: File,
@@ -37,7 +69,27 @@ export async function uploadProductImage(
   variantId?: string
 ): Promise<string | null> {
   try {
-    const fileExt = file.name.split('.').pop()
+    // Validate file
+    if (!file || file.size === 0) {
+      console.error('Invalid file provided for upload')
+      return null
+    }
+
+    // Check file size (max 10MB)
+    const maxSize = 10 * 1024 * 1024 // 10MB
+    if (file.size > maxSize) {
+      console.error('File too large. Maximum size is 10MB')
+      return null
+    }
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']
+    if (!allowedTypes.includes(file.type)) {
+      console.error('Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed')
+      return null
+    }
+
+    const fileExt = file.name.split('.').pop()?.toLowerCase()
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
     const filePath = productId 
       ? variantId 
@@ -45,6 +97,15 @@ export async function uploadProductImage(
         : `products/${productId}/${fileName}`
       : `temp/${fileName}`
 
+    console.log('🗄️ [DEBUG] Starting image upload:', {
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type,
+      filePath,
+      bucket: STORAGE_BUCKETS.PRODUCT_IMAGES
+    })
+
+    // Upload file to Supabase Storage
     const { data, error } = await supabase.storage
       .from(STORAGE_BUCKETS.PRODUCT_IMAGES)
       .upload(filePath, file, {
@@ -53,18 +114,25 @@ export async function uploadProductImage(
       })
 
     if (error) {
-      console.error('Error uploading image:', error)
+      console.error('❌ [DEBUG] Supabase storage upload error:', error)
       return null
     }
+
+    console.log('✅ [DEBUG] File uploaded successfully:', data)
 
     // Get public URL
     const { data: urlData } = supabase.storage
       .from(STORAGE_BUCKETS.PRODUCT_IMAGES)
       .getPublicUrl(filePath)
 
+    console.log('🔗 [DEBUG] Generated public URL:', urlData.publicUrl)
     return urlData.publicUrl
   } catch (error) {
-    console.error('Error uploading product image:', error)
+    console.error('❌ [DEBUG] Error uploading product image:', error)
+    console.error('❌ [DEBUG] Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : 'No stack trace'
+    })
     return null
   }
 }

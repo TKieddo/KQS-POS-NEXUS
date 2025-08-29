@@ -51,7 +51,7 @@ export const POSInterface: React.FC = () => {
     clearCustomer,
     setDiscount
   } = useCartContext()
-  const { products, loading: productsLoading, searchProducts, getProductByBarcode } = useProducts()
+  const { products, loading: productsLoading, searchProducts, getProductByBarcode, fetchProducts } = useProducts()
   const { heldOrders, holdOrder, retrieveOrder, removeHeldOrder } = useHeldOrders()
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -120,7 +120,11 @@ export const POSInterface: React.FC = () => {
   }
 
   const handleAddToOrder = (product: Product, quantity: number = 1, options?: Record<string, any>) => {
-    addToCart(product, quantity)
+    // Extract variant information from options
+    const variantId = options?.variantId
+    const variantOptions = options?.variantOptions
+    
+    addToCart(product, quantity, variantId, variantOptions)
     setShowAddOrder(false)
     setShowProductDetail(false)
     setSelectedProduct(null)
@@ -259,6 +263,10 @@ export const POSInterface: React.FC = () => {
         clearCart()
         clearCustomer()
         setDiscount(0, 'percentage')
+        
+        // Refresh products to show updated quantities after sale
+        console.log('🔄 Refreshing products after sale completion...')
+        await searchProducts('')
       } else {
         toast.error(result.error || 'Failed to complete sale')
       }
@@ -334,10 +342,6 @@ export const POSInterface: React.FC = () => {
     paymentMethod: string
   }) => {
     try {
-      // FIXED: Don't create a separate payment record for the deposit
-      // The deposit amount is already tracked in laybye_orders.deposit_amount
-      // Only create payment records for additional payments beyond the deposit
-      
       // Generate transaction number
       const now = new Date()
       const transactionNumber = `TXN${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}-${now.getHours().toString().padStart(2,'0')}${now.getMinutes().toString().padStart(2,'0')}${now.getSeconds().toString().padStart(2,'0')}`
@@ -345,13 +349,40 @@ export const POSInterface: React.FC = () => {
       // Calculate change
       const change = paymentData.amountReceived - laybyePaymentData.depositAmount
       
+      // IMPORTANT: Create a sale record for the laybye payment so it appears in sales and till sessions
+      // This ensures the payment is recorded in cash up and sales reports
+      const { createSale } = await import('@/lib/sales-service')
+      
+      const saleData = {
+        customer_id: customer?.id,
+        branch_id: selectedBranch?.id || '00000000-0000-0000-0000-000000000001',
+        items: [], // No items for laybye payment - it's just a payment transaction
+        subtotal: laybyePaymentData.depositAmount,
+        tax_amount: 0,
+        discount_amount: 0,
+        total_amount: laybyePaymentData.depositAmount,
+        payment_method: paymentData.paymentMethod,
+        payment_status: 'completed' as const,
+        sale_type: 'laybye' as const,
+        notes: `Laybye payment for order ${laybyePaymentData.laybyeOrder.order_number}`
+      }
+      
+      const saleResult = await createSale(saleData)
+      
+      if (!saleResult.success) {
+        console.error('Failed to create sale record for laybye payment:', saleResult.error)
+        toast.error('Payment processed but failed to record in sales')
+      } else {
+        console.log('Sale record created for laybye payment:', saleResult.data)
+      }
+      
       // Set payment success details
       setLaybyePaymentDetails({
         paymentMethod: paymentData.paymentMethod,
         depositAmount: laybyePaymentData.depositAmount,
         amountPaid: paymentData.amountReceived,
         change: Math.max(0, change),
-        transactionNumber
+        transactionNumber: saleResult.success ? saleResult.data.transaction_number : transactionNumber
       })
       
       // Print BOTH laybye reserve slip AND laybye payment receipt
@@ -437,6 +468,10 @@ export const POSInterface: React.FC = () => {
       clearCustomer()
       setDiscount(0, 'percentage')
       setLaybyePaymentData(null)
+      
+      // Refresh products to show updated quantities after laybye payment
+      console.log('🔄 Refreshing products after laybye payment completion...')
+      await searchProducts('')
     } catch (error) {
       console.error('Error processing laybye payment:', error)
       toast.error('Failed to process payment')
@@ -601,9 +636,12 @@ export const POSInterface: React.FC = () => {
       {selectedProduct && showProductDetail && (
         <ProductDetailModal
           product={selectedProduct}
-          onClose={() => {
+          onClose={async () => {
             setShowProductDetail(false)
             setSelectedProduct(null)
+            // Refresh products when modal is closed to ensure quantities are up to date
+            console.log('🔄 Refreshing products after ProductDetailModal close...')
+            await searchProducts('')
           }}
           onAddToOrder={() => {
             setShowProductDetail(false)
@@ -616,9 +654,12 @@ export const POSInterface: React.FC = () => {
       {selectedProduct && showAddOrder && (
         <AddOrderModal
           product={selectedProduct}
-          onClose={() => {
+          onClose={async () => {
             setShowAddOrder(false)
             setSelectedProduct(null)
+            // Refresh products when modal is closed to ensure quantities are up to date
+            console.log('🔄 Refreshing products after AddOrderModal close...')
+            await searchProducts('')
           }}
           onAddToOrder={handleAddToOrder}
         />

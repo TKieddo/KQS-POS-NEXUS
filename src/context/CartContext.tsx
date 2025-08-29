@@ -8,7 +8,7 @@ interface CartContextType {
   customer: Customer | null
   discount: number
   discountType: 'percentage' | 'fixed'
-  addToCart: (product: Product, quantity: number) => void
+  addToCart: (product: Product, quantity: number, variantId?: string, variantOptions?: Record<string, string>) => void
   removeFromCart: (itemId: string) => void
   updateQuantity: (itemId: string, quantity: number) => void
   clearCart: () => void
@@ -41,13 +41,17 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
   const [discount, setDiscountState] = useState(0)
   const [discountType, setDiscountTypeState] = useState<'percentage' | 'fixed'>('percentage')
 
-  const addToCart = useCallback((product: Product, quantity: number = 1) => {
+  const addToCart = useCallback((product: Product, quantity: number = 1, variantId?: string, variantOptions?: Record<string, string>) => {
     setCart(prevCart => {
-      const existingItem = prevCart.find(item => item.product.id === product.id)
+      // For products with variants, we need to check both product ID and variant ID
+      const existingItem = prevCart.find(item => 
+        item.product.id === product.id && 
+        item.variantId === variantId
+      )
       
       if (existingItem) {
         return prevCart.map(item =>
-          item.product.id === product.id
+          item.product.id === product.id && item.variantId === variantId
             ? {
                 ...item,
                 quantity: item.quantity + quantity,
@@ -57,11 +61,13 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
         )
       } else {
         const newItem: CartItem = {
-          id: `${product.id}-${Date.now()}`,
+          id: `${product.id}-${variantId || 'main'}-${Date.now()}`,
           product,
           quantity,
           unitPrice: product.price,
-          totalPrice: product.price * quantity
+          totalPrice: product.price * quantity,
+          variantId: variantId,
+          variantOptions: variantOptions
         }
         return [...prevCart, newItem]
       }
