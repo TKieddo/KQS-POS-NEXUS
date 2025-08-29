@@ -1253,15 +1253,36 @@ export const getProductBySku = async (sku: string) => {
 
 // Create a new product
 export const createProduct = async (productData: Omit<Database['public']['Tables']['products']['Insert'], 'id' | 'created_at' | 'updated_at'>) => {
+  console.log('🗄️ [DEBUG] createProduct: Starting database insert')
+  console.log('📦 [DEBUG] createProduct: Input productData:', JSON.stringify(productData, null, 2))
+  
+  const insertData = {
+    ...productData,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  }
+  
+  console.log('🗄️ [DEBUG] createProduct: Final insert data:', JSON.stringify(insertData, null, 2))
+  
   const { data, error } = await supabase
     .from('products')
-    .insert({
-      ...productData,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    })
+    .insert(insertData)
     .select()
     .single()
+
+  console.log('🗄️ [DEBUG] createProduct: Supabase response:', { data, error })
+  
+  if (error) {
+    console.error('❌ [DEBUG] createProduct: Database error:', error)
+    console.error('❌ [DEBUG] createProduct: Error details:', {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint
+    })
+  } else {
+    console.log('✅ [DEBUG] createProduct: Product created successfully:', data)
+  }
 
   return { data, error }
 }
@@ -1527,15 +1548,37 @@ export const deleteBranch = async (id: string) => {
 
 // Create a new product variant
 export const createProductVariant = async (variantData: Omit<ProductVariant, 'id' | 'created_at' | 'updated_at'>) => {
+  console.log('🔢 [DEBUG] createProductVariant: Starting variant insert')
+  console.log('📦 [DEBUG] createProductVariant: Input variantData:', JSON.stringify(variantData, null, 2))
+  
+  const insertData = {
+    ...variantData,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  }
+  
+  console.log('🔢 [DEBUG] createProductVariant: Final insert data:', JSON.stringify(insertData, null, 2))
+  
   const { data, error } = await supabase
     .from('product_variants')
-    .insert({
-      ...variantData,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    })
+    .insert(insertData)
     .select()
     .single()
+    
+  console.log('🔢 [DEBUG] createProductVariant: Supabase response:', { data, error })
+  
+  if (error) {
+    console.error('❌ [DEBUG] createProductVariant: Database error:', error)
+    console.error('❌ [DEBUG] createProductVariant: Error details:', {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint
+    })
+  } else {
+    console.log('✅ [DEBUG] createProductVariant: Variant created successfully:', data)
+  }
+  
   return { data, error }
 }
 
@@ -1545,14 +1588,36 @@ export const createProductVariant = async (variantData: Omit<ProductVariant, 'id
 
 // Create a new product image
 export const createProductImage = async (imageData: Omit<ProductImage, 'id' | 'created_at'>) => {
+  console.log('🖼️ [DEBUG] createProductImage: Starting image insert')
+  console.log('📦 [DEBUG] createProductImage: Input imageData:', JSON.stringify(imageData, null, 2))
+  
+  const insertData = {
+    ...imageData,
+    created_at: new Date().toISOString()
+  }
+  
+  console.log('🖼️ [DEBUG] createProductImage: Final insert data:', JSON.stringify(insertData, null, 2))
+  
   const { data, error } = await supabase
     .from('product_images')
-    .insert({
-      ...imageData,
-      created_at: new Date().toISOString()
-    })
+    .insert(insertData)
     .select()
     .single()
+    
+  console.log('🖼️ [DEBUG] createProductImage: Supabase response:', { data, error })
+  
+  if (error) {
+    console.error('❌ [DEBUG] createProductImage: Database error:', error)
+    console.error('❌ [DEBUG] createProductImage: Error details:', {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint
+    })
+  } else {
+    console.log('✅ [DEBUG] createProductImage: Image created successfully:', data)
+  }
+  
   return { data, error }
 }
 

@@ -139,11 +139,14 @@ export const useProducts = (): UseProductsReturn => {
 
   // Add new product (normalized)
   const addProduct = useCallback(async (productData: any): Promise<Product | null> => {
+    console.log('🔧 [DEBUG] useProducts.addProduct: Starting product creation')
+    console.log('📦 [DEBUG] useProducts.addProduct: Input productData:', JSON.stringify(productData, null, 2))
+    
     setLoading(true)
     setError(null)
     try {
       // 2. Create product - only pass fields that exist in the products table
-      const { data: product, error: createError } = await createProduct({
+      const productInsertData = {
         name: productData.name,
         description: productData.description,
         sku: productData.sku,
@@ -163,12 +166,29 @@ export const useProducts = (): UseProductsReturn => {
         discount_description: productData.discount_description,
         discount_expires_at: productData.discount_expires_at,
         is_discount_active: productData.is_discount_active,
-      })
-      if (createError || !product) throw new Error(createError?.message || 'Product creation failed')
+      }
+      
+      console.log('💾 [DEBUG] useProducts.addProduct: Calling createProduct with data:', JSON.stringify(productInsertData, null, 2))
+      
+      const { data: product, error: createError } = await createProduct(productInsertData)
+      
+      console.log('💾 [DEBUG] useProducts.addProduct: createProduct result:', { product, error: createError })
+      
+      if (createError || !product) {
+        console.error('❌ [DEBUG] useProducts.addProduct: Product creation failed:', createError)
+        throw new Error(createError?.message || 'Product creation failed')
+      }
+      
+      console.log('✅ [DEBUG] useProducts.addProduct: Product created successfully with ID:', product.id)
+      
       // 3. Create variants - convert to proper database format
       if (productData.variants && productData.variants.length > 0) {
-        for (const variant of productData.variants) {
-          await createProductVariant({
+        console.log('🔢 [DEBUG] useProducts.addProduct: Creating variants...')
+        for (let i = 0; i < productData.variants.length; i++) {
+          const variant = productData.variants[i]
+          console.log(`🔢 [DEBUG] useProducts.addProduct: Creating variant ${i + 1}/${productData.variants.length}:`, JSON.stringify(variant, null, 2))
+          
+          const variantInsertData = {
             product_id: product.id,
             sku: variant.sku,
             barcode: variant.barcode || null, // Use variant barcode if available
@@ -184,17 +204,31 @@ export const useProducts = (): UseProductsReturn => {
             discount_description: null,
             discount_expires_at: null,
             is_discount_active: false,
-          })
+          }
+          
+          console.log(`🔢 [DEBUG] useProducts.addProduct: Variant ${i + 1} insert data:`, JSON.stringify(variantInsertData, null, 2))
+          
+          const variantResult = await createProductVariant(variantInsertData)
+          console.log(`🔢 [DEBUG] useProducts.addProduct: Variant ${i + 1} creation result:`, variantResult)
         }
+        console.log('✅ [DEBUG] useProducts.addProduct: All variants created successfully')
+      } else {
+        console.log('ℹ️ [DEBUG] useProducts.addProduct: No variants to create')
       }
+      
       // Note: Product images are now handled separately in the AddProductModal
       // to avoid the gallery_urls column issue
+      console.log('📝 [DEBUG] useProducts.addProduct: Updating local products state')
       setProducts(prev => [...prev, product])
+      console.log('✅ [DEBUG] useProducts.addProduct: Product creation completed successfully')
       return product
     } catch (err) {
+      console.error('❌ [DEBUG] useProducts.addProduct: Error occurred:', err)
+      console.error('❌ [DEBUG] useProducts.addProduct: Error stack:', err instanceof Error ? err.stack : 'No stack trace')
       setError(err instanceof Error ? err.message : 'Failed to create product')
       return null
     } finally {
+      console.log('🏁 [DEBUG] useProducts.addProduct: Setting loading to false')
       setLoading(false)
     }
   }, [])

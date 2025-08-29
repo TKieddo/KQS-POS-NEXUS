@@ -169,33 +169,69 @@ export const AddProductModal = ({ isOpen, onClose, onProductAdded }: AddProductM
   }, [productData.name, productData.sku, productData.barcode])
 
   const handleSave = async () => {
+    console.log('🚀 [DEBUG] AddProductModal: handleSave started')
+    console.log('📋 [DEBUG] Form validation check:', { 
+      name: productData.name, 
+      price: productData.price,
+      hasName: !!productData.name,
+      hasPrice: !!productData.price
+    })
+
     if (!productData.name || !productData.price) {
+      console.log('❌ [DEBUG] Validation failed - missing required fields')
       toast.error('Please fill in all required fields (Product Name and Price)')
       return
     }
 
+    console.log('✅ [DEBUG] Validation passed, starting save process')
     setIsSubmitting(true)
 
     try {
       // 1. Upload images to Supabase
+      console.log('🖼️ [DEBUG] Starting image upload process')
+      console.log('📸 [DEBUG] Images to upload:', images.length)
+      
       const urlMap: Record<string, string> = {}
       if (images.length > 0) {
+        console.log('📤 [DEBUG] Uploading images...')
         toast.loading('Uploading images...')
-        for (const img of images) {
+        for (let i = 0; i < images.length; i++) {
+          const img = images[i]
+          console.log(`📤 [DEBUG] Uploading image ${i + 1}/${images.length}:`, {
+            fileName: img.file.name,
+            fileSize: img.file.size,
+            fileType: img.file.type
+          })
+          
           const supaUrl = await uploadProductImage(img.file)
+          console.log(`📤 [DEBUG] Image ${i + 1} upload result:`, supaUrl)
+          
           if (!supaUrl) {
+            console.error('❌ [DEBUG] Image upload failed for image:', img.file.name)
             toast.dismiss()
             toast.error('Failed to upload image. Please try again.')
             return
           }
           urlMap[img.url] = supaUrl
         }
+        console.log('✅ [DEBUG] All images uploaded successfully')
+        console.log('🖼️ [DEBUG] URL mapping:', urlMap)
         toast.dismiss()
+      } else {
+        console.log('ℹ️ [DEBUG] No images to upload')
       }
 
       // 2. Prepare product data with Supabase URLs
+      console.log('🔧 [DEBUG] Preparing product data')
       const mainImageUrl = mainImage && urlMap[mainImage] ? urlMap[mainImage] : mainImage
       const galleryUrls = images.map(img => urlMap[img.url]).filter(Boolean)
+      
+      console.log('🖼️ [DEBUG] Image URLs:', {
+        mainImage,
+        mainImageUrl,
+        galleryUrls,
+        urlMap
+      })
 
       // Use the variants from VariantManager
       const productToSave = {
@@ -222,24 +258,43 @@ export const AddProductModal = ({ isOpen, onClose, onProductAdded }: AddProductM
         is_discount_active: productData.is_discount_active,
       }
 
+      console.log('📦 [DEBUG] Product data to save:', JSON.stringify(productToSave, null, 2))
+      console.log('🔢 [DEBUG] Variants count:', variants.length)
+      if (variants.length > 0) {
+        console.log('🔢 [DEBUG] Variants data:', JSON.stringify(variants, null, 2))
+      }
+
       // 3. Save the product
+      console.log('💾 [DEBUG] Calling addProduct function...')
       toast.loading('Saving product...')
       const result = await addProduct(productToSave)
       
+      console.log('💾 [DEBUG] addProduct result:', result)
+      
       if (!result) {
+        console.error('❌ [DEBUG] addProduct returned null - product save failed')
         toast.dismiss()
         toast.error('Failed to save product. Please check your data and try again.')
         return
       }
 
+      console.log('✅ [DEBUG] Product saved successfully with ID:', result.id)
+
       // 4. Save product images
       if (galleryUrls.length > 0) {
+        console.log('🖼️ [DEBUG] Saving product images to database...')
         toast.loading('Saving product images...')
         for (let i = 0; i < galleryUrls.length; i++) {
           const imageUrl = galleryUrls[i]
           const isMain = imageUrl === mainImageUrl
           
-          await createProductImage({
+          console.log(`🖼️ [DEBUG] Saving image ${i + 1}/${galleryUrls.length}:`, {
+            imageUrl,
+            isMain,
+            productId: result.id
+          })
+          
+          const imageSaveResult = await createProductImage({
             product_id: result.id,
             variant_id: null,
             image_url: imageUrl,
@@ -248,37 +303,57 @@ export const AddProductModal = ({ isOpen, onClose, onProductAdded }: AddProductM
             is_main_image: isMain,
             sort_order: i
           })
+          
+          console.log(`🖼️ [DEBUG] Image ${i + 1} save result:`, imageSaveResult)
         }
+        console.log('✅ [DEBUG] All product images saved successfully')
+      } else {
+        console.log('ℹ️ [DEBUG] No product images to save')
       }
       
       // 5. Save variants if any
       if (variants.length > 0) {
+        console.log('🔢 [DEBUG] Saving product variants...')
         toast.loading('Saving product variants...')
-        for (const variant of variants) {
+        for (let i = 0; i < variants.length; i++) {
+          const variant = variants[i]
+          console.log(`🔢 [DEBUG] Saving variant ${i + 1}/${variants.length}:`, JSON.stringify(variant, null, 2))
+          
           // Save variant to product_variants table
-          const { error: variantError } = await supabase
+          const variantInsertData = {
+            product_id: result.id,
+            sku: variant.sku,
+            barcode: variant.barcode,
+            price: variant.price,
+            cost_price: variant.cost,
+            stock_quantity: variant.stock_quantity,
+            image_url: variant.image_url,
+            is_active: variant.is_active,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }
+          
+          console.log(`🔢 [DEBUG] Variant ${i + 1} insert data:`, JSON.stringify(variantInsertData, null, 2))
+          
+          const { data: variantData, error: variantError } = await supabase
             .from('product_variants')
-            .insert({
-              product_id: result.id,
-              sku: variant.sku,
-              barcode: variant.barcode,
-              price: variant.price,
-              cost_price: variant.cost,
-              stock_quantity: variant.stock_quantity,
-              image_url: variant.image_url,
-              is_active: variant.is_active,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            })
+            .insert(variantInsertData)
+            .select()
+            .single()
+
+          console.log(`🔢 [DEBUG] Variant ${i + 1} insert result:`, { data: variantData, error: variantError })
 
           if (variantError) {
-            console.error('Error saving variant:', variantError)
+            console.error(`❌ [DEBUG] Error saving variant ${variant.sku}:`, variantError)
             toast.dismiss()
             toast.error(`Failed to save variant ${variant.sku}: ${variantError.message}`)
             return
           }
 
+          console.log(`✅ [DEBUG] Variant ${variant.sku} saved successfully with ID:`, variantData?.id)
+
           // Save variant options to product_variant_options table
+          console.log(`🔢 [DEBUG] Saving options for variant ${variant.sku}...`)
           const variantId = await supabase
             .from('product_variants')
             .select('id')
@@ -286,32 +361,61 @@ export const AddProductModal = ({ isOpen, onClose, onProductAdded }: AddProductM
             .eq('sku', variant.sku)
             .single()
 
+          console.log(`🔢 [DEBUG] Variant ID lookup result:`, variantId)
+
           if (variantId.data) {
+            console.log(`🔢 [DEBUG] Saving options for variant ID:`, variantId.data.id)
             // Save each option (size, color, gender, brand)
             for (const [optionType, optionValue] of Object.entries(variant.options)) {
               if (optionValue) {
+                console.log(`🔢 [DEBUG] Processing option:`, { optionType, optionValue })
+                
                 // Get the variant option ID
-                const { data: optionData } = await supabase
+                const { data: optionData, error: optionError } = await supabase
                   .from('variant_options')
                   .select('id')
                   .eq('value', optionValue)
                   .single()
 
+                console.log(`🔢 [DEBUG] Option lookup result:`, { optionData, optionError })
+
                 if (optionData) {
-                  await supabase
+                  const optionInsertData = {
+                    product_variant_id: variantId.data.id,
+                    option_id: optionData.id,
+                    created_at: new Date().toISOString()
+                  }
+                  
+                  console.log(`🔢 [DEBUG] Inserting option:`, optionInsertData)
+                  
+                  const { data: insertedOption, error: insertOptionError } = await supabase
                     .from('product_variant_options')
-                    .insert({
-                      product_variant_id: variantId.data.id,
-                      option_id: optionData.id,
-                      created_at: new Date().toISOString()
-                    })
+                    .insert(optionInsertData)
+                    .select()
+                    .single()
+
+                  console.log(`🔢 [DEBUG] Option insert result:`, { data: insertedOption, error: insertOptionError })
+                  
+                  if (insertOptionError) {
+                    console.error(`❌ [DEBUG] Error saving option ${optionType}:`, insertOptionError)
+                  } else {
+                    console.log(`✅ [DEBUG] Option ${optionType} saved successfully`)
+                  }
+                } else {
+                  console.warn(`⚠️ [DEBUG] Option not found in variant_options table:`, optionValue)
                 }
               }
             }
+          } else {
+            console.error(`❌ [DEBUG] Could not find variant ID for SKU:`, variant.sku)
           }
         }
+        console.log('✅ [DEBUG] All variants saved successfully')
+      } else {
+        console.log('ℹ️ [DEBUG] No variants to save')
       }
       
+      console.log('🎉 [DEBUG] Product save process completed successfully!')
       toast.dismiss()
       toast.success(`Product "${productData.name}" saved successfully!`)
       
@@ -319,6 +423,7 @@ export const AddProductModal = ({ isOpen, onClose, onProductAdded }: AddProductM
       onProductAdded?.()
       
       // Reset form
+      console.log('🔄 [DEBUG] Resetting form...')
       setProductData({
         name: '',
         description: '',
@@ -343,11 +448,14 @@ export const AddProductModal = ({ isOpen, onClose, onProductAdded }: AddProductM
       setImages([])
       setMainImage(null)
       setVariants([])
+      console.log('✅ [DEBUG] Form reset completed')
     } catch (error) {
-      console.error('Error adding product:', error)
+      console.error('❌ [DEBUG] Error in handleSave:', error)
+      console.error('❌ [DEBUG] Error stack:', error instanceof Error ? error.stack : 'No stack trace')
       toast.dismiss()
       toast.error(`Failed to add product: ${error instanceof Error ? error.message : 'Unknown error occurred'}`)
     } finally {
+      console.log('🏁 [DEBUG] handleSave completed, setting isSubmitting to false')
       setIsSubmitting(false)
     }
   }
