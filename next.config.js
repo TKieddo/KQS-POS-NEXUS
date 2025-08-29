@@ -8,7 +8,9 @@ const nextConfig = {
   },
   trailingSlash: false,
   poweredByHeader: false,
-  swcMinify: true,
+  experimental: {
+    serverComponentsExternalPackages: [],
+  },
 }
 
 module.exports = nextConfig

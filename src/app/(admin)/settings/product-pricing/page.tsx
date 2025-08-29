@@ -174,14 +174,7 @@ export default function ProductPricingPage() {
     }
   }
 
-  // Debug logging
-  console.log('ProductPricingPage render:', {
-    isLoading,
-    error,
-    settings: !!settings,
-    rulesCount: rules?.length || 0,
-    overview
-  })
+  // Debug logging removed for production
 
   const tabs = [
     {

@@ -468,7 +468,7 @@ export const EnhancedInventoryTable: React.FC<EnhancedInventoryTableProps> = ({
   onBulkAllocate,
   onRefresh
 }) => {
-  console.log('EnhancedInventoryTable received products:', products.length, products.map(p => ({ name: p.name, has_variants: p.has_variants })))
+  // Debug logging removed for production
   if (isLoading) {
     return (
       <Card>
